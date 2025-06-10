@@ -2,9 +2,9 @@
 let read_json_rpc (channels: Channel.t) : (Jsonrpc.Packet.t, EventError.t) result Lwt.t =
   let%lwt content = Channel.read_raw_rpc_from_channel channels in
   match content with
-  | None ->
-      Lwt.return (Error (EventError.EndOfFile))
-  | Some (_, body) ->
+  | Error _ as e ->
+      Lwt.return e
+  | Ok (size, body) ->
       try
         let json = Yojson.Safe.from_string body in
         let packet = Jsonrpc.Packet.t_of_yojson json in
@@ -38,8 +38,15 @@ let receive_rpc_request (req : Jsonrpc.Request.t)  =
       []
   | Ok req -> LspProtocol.receive_lsp_request id req
 
-let receive_rpc_notification (_ : Jsonrpc.Notification.t) = []
+let receive_rpc_notification (notif : Jsonrpc.Notification.t) =
+  let lsp_notif = Lsp.Client_notification.of_jsonrpc notif in
+  match lsp_notif with
+  | Error err ->
+      Logger.log (Logger.std_logger) (Format.asprintf "Failed to decode notification: %s\n" err);
+      []
+  | Ok notif -> LspProtocol.receive_lsp_notification notif
 
+(*TODO : Check if this function should raise an error*)
 let receive_rpc_response (_ : Jsonrpc.Response.t) = []
 
 let receive_rpc_batch_response (_ : Jsonrpc.Response.t list) = []
