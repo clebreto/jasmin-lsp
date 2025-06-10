@@ -61,9 +61,9 @@ module Make (Handler : EventHandler) = struct
           (* We received an incorrect input, but the stream doesn't close, we continue waiting for events*)
           server_loop channel event_queue
       | Ok new_events ->
-      (* If we received new events, we add them to the event queue *)
-        let new_events = EventHeap.of_list new_events in
-        server_loop channel new_events
+          (* If we received new events, we add them to the event queue *)
+          let event_queue = EventHeap.merge event_queue (EventHeap.of_list new_events) in
+          server_loop channel event_queue
       end
     | Some (_,event) ->
       let event_queue = EventHeap.del_min event_queue in (* We need to delete the first element since priority queue doesn't have a pop method*)
