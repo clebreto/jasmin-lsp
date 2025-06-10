@@ -1,5 +1,4 @@
 
-
 (**
 Channel level module : read and write raw inputs to defined channels. These functions serves as abstraction for console I/O operations.
 *)
@@ -62,7 +61,7 @@ let parse_nonstandard_header (headers : request_headers) (key : string) (value :
   }
 
 
-let read_header (channel : t) : (string, EventError.t) result Lwt.t = 
+let read_rpc_header (channel : t) : (string, EventError.t) result Lwt.t =
   Lwt.catch
     (fun () ->
       let%lwt line = Lwt_io.read_line channel.in_channel in
@@ -73,7 +72,7 @@ let read_header (channel : t) : (string, EventError.t) result Lwt.t =
 
 let read_rpc_headers (channel : t) : (request_headers, EventError.t) result Lwt.t =
   let rec loop acc =
-    match%lwt read_header channel with
+    match%lwt read_rpc_header channel with
     | Ok line when String.trim line = "" -> Lwt.return (Ok acc)
     | Error _ as e -> Lwt.return e
     | Ok line ->
@@ -101,12 +100,20 @@ let read_rpc_headers (channel : t) : (request_headers, EventError.t) result Lwt.
   in
   loop empty_headers
 
-let read_rpc_body (channel : t) (size : int) : (string,EventError.t)result Lwt.t =
-  Lwt.catch
-    (fun () ->
-      let%lwt body = Lwt_io.read ~count:size channel.in_channel in
-      Lwt.return (Ok body))
-    (fun exn ->Lwt.return (Error EventError.EndOfFile))
+let read_rpc_body (channel : t) (size : int) : (string,EventError.t) result Lwt.t =
+    let left = ref size in
+    let stream = Lwt_stream.from (fun () ->
+        if !left <= 0 then Lwt.return_none
+        else
+          begin
+            let%lwt s = Lwt_io.read ~count:(!left) channel.in_channel in
+            left:=!left - (String.length s);
+            Lwt.return (Some s)
+          end
+        ) in
+    let%lwt inputs = Lwt_stream.to_list stream in
+    let body = String.concat "" inputs in
+    Lwt.return (Ok(body))
 
 let read_raw_rpc_from_channel (channel : t) : ((int * string),EventError.t) result Lwt.t =
   let%lwt headers = read_rpc_headers channel in
@@ -119,5 +126,6 @@ let read_raw_rpc_from_channel (channel : t) : ((int * string),EventError.t) resu
       let%lwt body = read_rpc_body channel size in
       match body with
       | Error _ as e -> Lwt.return e
-      | Ok body -> Lwt.return (Ok (size, body))
+      | Ok body ->
+        Lwt.return (Ok (size, body))
 

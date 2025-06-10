@@ -6,7 +6,6 @@ let read_json_rpc (channels: Channel.t) : (Jsonrpc.Packet.t, EventError.t) resul
       Lwt.return e
   | Ok (size, body) ->
       try
-        Logger.log (Logger.std_logger) (Format.asprintf "Decoding JSON-RPC packet : %d %s" size body);
         let json = Yojson.Safe.from_string body in
         let packet = Jsonrpc.Packet.t_of_yojson json in
         Lwt.return (Ok packet)
