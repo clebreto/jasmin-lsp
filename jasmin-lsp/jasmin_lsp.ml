@@ -44,7 +44,7 @@ module Make (Handler : EventHandler) = struct
   let rec server_loop (channel : Channel.t) (event_queue : EventHeap.t) =
     let next_event =
       try
-        Some(EventHeap.find_min event_queue)
+        Some(EventHeap.find_min event_queue) (* Retrieve the element with the most negative priority *)
       with
       | Invalid_argument _ -> None
     in
