@@ -39,7 +39,6 @@ let read_rpc_body (channel : t) (size : int) : string option Lwt.t =
       Lwt.return (Some body))
     (fun exn ->Lwt.return_none)
 
-
 let read_raw_rpc_from_channel (channel : t) : (int * string) option Lwt.t =
   try
     let header = read_rpc_header channel in

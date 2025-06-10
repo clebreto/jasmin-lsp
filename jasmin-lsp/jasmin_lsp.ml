@@ -3,8 +3,12 @@ open Protocol
 module type EventHandler = sig
   type event
 
-  val receive_event : Channel.t -> (Priority.t * event) list option Lwt.t
+  val receive_event : Channel.t -> ((Priority.t * event) list, EventError.t) result Lwt.t
 
+  (**
+    Event handler function : should return a list of new events to be processed.
+    The events should be ordered by priority, with the highest priority first.
+  *)
   val handle_event : event -> (Priority.t * event) list Lwt.t
 end
 
@@ -12,7 +16,7 @@ module RpcHandler : EventHandler = struct
 
   type event = RpcProtocolEvent.t
 
-  let receive_event (channel : Channel.t) : (Priority.t * event) list option Lwt.t = RpcProtocol.receive_rpc_packet channel
+  let receive_event (channel : Channel.t) : ((Priority.t * event) list, EventError.t) result Lwt.t = RpcProtocol.receive_rpc_packet channel
 
   let handle_event (event : event) : (Priority.t * event) list Lwt.t =
     match event with
@@ -49,12 +53,15 @@ module Make (Handler : EventHandler) = struct
       let%lwt new_events = Handler.receive_event channel in
       begin
       match new_events with
-      | None ->
+      | Error EndOfFile ->
           (* If we didn't receive any new events, we log and exit the server loop, it indicated that input is closed *)
           Logger.log Logger.std_logger "No events received, input stream may be closed. Exiting server loop.\n";
           Lwt.return_unit
-      | Some new_events ->
-      (* If we received new events, we need to add them to the event queue *)
+      | Error (ParseError) ->
+          (* We received an incorrect input, but the stream doesn't close, we continue waiting for events*)
+          server_loop channel event_queue
+      | Ok new_events ->
+      (* If we received new events, we add them to the event queue *)
         let new_events = EventHeap.of_list new_events in
         server_loop channel new_events
       end

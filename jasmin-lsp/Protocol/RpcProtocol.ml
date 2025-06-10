@@ -1,20 +1,21 @@
-let read_json_rpc (channels: Channel.t) : Jsonrpc.Packet.t option Lwt.t =
+
+let read_json_rpc (channels: Channel.t) : (Jsonrpc.Packet.t, EventError.t) result Lwt.t =
   let%lwt content = Channel.read_raw_rpc_from_channel channels in
   match content with
   | None ->
-      Lwt.return None
+      Lwt.return (Error (EventError.EndOfFile))
   | Some (_, body) ->
       try
         let json = Yojson.Safe.from_string body in
         let packet = Jsonrpc.Packet.t_of_yojson json in
-        Lwt.return (Some packet)
+        Lwt.return (Ok packet)
       with
       | Yojson.Json_error err ->
           Logger.log (Logger.std_logger) (Format.asprintf "Failed to decode JSON-RPC packet: %s" err);
-          Lwt.return None
+          Lwt.return (Error (EventError.ParseError))
       | _ ->
           Logger.log (Logger.std_logger) "Unexpected error while decoding JSON-RPC packet";
-          Lwt.return None
+          Lwt.return (Error (EventError.ParseError))
 
 let write_json_rpc (channels: Channel.t) (json: Yojson.Safe.t) =
   let content  = Yojson.Safe.pretty_to_string ~std:true json in
@@ -53,12 +54,11 @@ let handle_rpc_packet (packet : Jsonrpc.Packet.t) : (Priority.t * RpcProtocolEve
   | Batch_response batch_resp -> receive_rpc_batch_response batch_resp
   | Batch_call batch_call -> receive_rpc_batch_call batch_call
 
-let receive_rpc_packet (channel : Channel.t) : (Priority.t * RpcProtocolEvent.t) list option Lwt.t  =
+let receive_rpc_packet (channel : Channel.t) : ((Priority.t * RpcProtocolEvent.t) list, EventError.t) result Lwt.t  =
   let%lwt rpc = read_json_rpc channel in
   let result = match rpc with
-    | None -> None
-    | Some packet ->
-      Some (handle_rpc_packet packet)
+    | Error e -> Error e
+    | Ok packet -> Ok (handle_rpc_packet packet)
   in
   Lwt.return result
 
