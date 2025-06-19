@@ -1,0 +1,31 @@
+
+(**
+Channel level module : read and write raw inputs to defined channels. These functions serves as abstraction for console I/O operations.
+*)
+
+type t = {
+  in_channel : Lwt_io.input_channel;
+  out_channel : Lwt_io.output_channel;
+  err_channel : Lwt_io.output_channel;
+}
+
+let std_channel : t = {
+  in_channel = Lwt_io.stdin;
+  out_channel = Lwt_io.stdout;
+  err_channel = Lwt_io.stderr;
+}
+
+let write_string_to_channel (channel : t) (str: string) =
+  Lwt_io.write_chars channel.out_channel (Lwt_stream.of_string str)
+
+let write_string_to_channel_err (channel : t) (str: string) =
+  Lwt_io.write_chars channel.err_channel (Lwt_stream.of_string str)
+
+let read_raw_line (channel:t) : string Lwt.t = Lwt_io.read_line channel.in_channel
+
+let read_raw_chars (channel:t) (size:int) : string Lwt.t = Lwt_io.read ~count:size channel.in_channel
+
+let flush_out_channel (channel:t) : unit Lwt.t = Lwt_io.flush channel.out_channel
+
+let flush_err_channel (channel:t) : unit Lwt.t = Lwt_io.flush channel.err_channel
+

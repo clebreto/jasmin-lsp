@@ -4,6 +4,8 @@
 let name = "jasmin-lsp"
 let version = "0.1.0"
 
+let channels = Io.Channel.std_channel
+
 let conf_request_id = max_int
 
 let capabilities : Lsp.Types.ServerCapabilities.t =

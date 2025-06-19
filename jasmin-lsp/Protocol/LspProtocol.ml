@@ -5,7 +5,7 @@ open RpcProtocolEvent
 let get_initialize_response (params : Lsp.Types.InitializeParams.t) =
   let param_options = params.initializationOptions in
   let _ = match param_options with
-  | None -> Logger.log (Logger.std_logger) "Failed to decode initialization options\n"; ()
+  | None -> Logger.log  "Failed to decode initialization options\n"; ()
   | Some _ -> ()
   in
   let server_infos = Lsp.Types.InitializeResult.create_serverInfo
@@ -36,7 +36,7 @@ let receive_lsp_request_inner : type a. Jsonrpc.Id.t -> a Lsp.Client_request.t -
   fun _ req ->
     match req with
     | Lsp.Client_request.Initialize params -> receive_initialize_request params
-    | _ -> Logger.log Logger.std_logger ("Unsupported request\n") ; Error "Unsupported request", []
+    | _ -> Logger.log ("Unsupported request\n") ; Error "Unsupported request", []
 
 let receive_lsp_request id req =
   match req with
@@ -52,7 +52,7 @@ let receive_lsp_request id req =
 let receive_lsp_notification (notif : Lsp.Client_notification.t) =
   match notif with
   | Lsp.Client_notification.Initialized ->
-    Logger.log Logger.std_logger "Server initialized\n";
+    Logger.log "Server initialized\n";
     []
   | _ -> []
 

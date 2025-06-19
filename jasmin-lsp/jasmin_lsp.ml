@@ -3,7 +3,7 @@ open Protocol
 module type EventHandler = sig
   type event
 
-  val receive_event : Channel.t -> ((Priority.t * event) list, EventError.t) result Lwt.t
+  val receive_event : unit -> ((Priority.t * event) list, EventError.t) result Lwt.t
 
   (**
     Event handler function : should return a list of new events to be processed.
@@ -16,7 +16,7 @@ module RpcHandler : EventHandler = struct
 
   type event = RpcProtocolEvent.t
 
-  let receive_event (channel : Channel.t) : ((Priority.t * event) list, EventError.t) result Lwt.t = RpcProtocol.receive_rpc_packet channel
+  let receive_event : unit -> ((Priority.t * event) list, EventError.t) result Lwt.t = RpcProtocol.receive_rpc_packet
 
   let handle_event (event : event) : (Priority.t * event) list Lwt.t =
     match event with
@@ -25,7 +25,7 @@ module RpcHandler : EventHandler = struct
         let new_events = RpcProtocol.handle_rpc_packet packet in
         Lwt.return new_events
     | RpcProtocolEvent.Send json ->
-        let%lwt () =  RpcProtocol.write_json_rpc Channel.std_channel json in
+        let%lwt () =  RpcProtocol.write_json_rpc json in
         Lwt.return []
 
 end
@@ -41,7 +41,7 @@ module Make (Handler : EventHandler) = struct
 
   module EventHeap = Batteries.Heap.Make (PE)
 
-  let rec server_loop (channel : Channel.t) (event_queue : EventHeap.t) =
+  let rec server_loop (event_queue : EventHeap.t) =
     let next_event =
       try
         Some(EventHeap.find_min event_queue) (* Retrieve the element with the most negative priority *)
@@ -50,33 +50,32 @@ module Make (Handler : EventHandler) = struct
     in
     match next_event with
     | None ->
-      let%lwt new_events = Handler.receive_event channel in
+      let%lwt new_events = Handler.receive_event () in
       begin
       match new_events with
       | Error EndOfFile ->
           (* If we didn't receive any new events, we log and exit the server loop, it indicated that input is closed *)
-          Logger.log Logger.std_logger "No events received, input stream may be closed. Exiting server loop.\n";
+          Logger.log "No events received, input stream may be closed. Exiting server loop.\n";
           Lwt.return_unit
       | Error (ParseError) ->
           (* We received an incorrect input, but the stream doesn't close, we continue waiting for events*)
-          server_loop channel event_queue
+          server_loop event_queue
       | Ok new_events ->
           (* If we received new events, we add them to the event queue *)
           let event_queue = EventHeap.merge event_queue (EventHeap.of_list new_events) in
-          server_loop channel event_queue
+          server_loop event_queue
       end
     | Some (_,event) ->
       let event_queue = EventHeap.del_min event_queue in (* We need to delete the first element since priority queue doesn't have a pop method*)
       let%lwt new_events = Handler.handle_event event in
       let event_queue = EventHeap.merge event_queue (EventHeap.of_list new_events) in
-      server_loop channel event_queue
+      server_loop event_queue
 end
 
 module BasicServer = Make(RpcHandler)
 
 let () =
-  Logger.log Logger.std_logger (Format.asprintf "%s language server (Lwt loop) started\n\n" Config.name);
+  Logger.log (Format.asprintf "%s language server (Lwt loop) started\n\n" Config.name);
   Lwt_main.run (
-    let channel = Channel.std_channel in
-    BasicServer.server_loop channel BasicServer.EventHeap.empty
+    BasicServer.server_loop BasicServer.EventHeap.empty
   )
