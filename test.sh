@@ -8,7 +8,7 @@ LSP_PID=$!
 
 # Send test messages
 {
-  printf "Content-Length: 121\r\n\r\n"
+  printf "Content-Length: 107\r\n\r\n"
   printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{}}}'
 } > test_pipe
 
