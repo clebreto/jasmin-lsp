@@ -14,7 +14,7 @@ let get_initialize_response (params : Lsp.Types.InitializeParams.t) =
     ()
   in
   let content = Lsp.Types.InitializeResult.{
-    capabilities=Config.capabilities;
+    capabilities= Config.capabilities;
     serverInfo=Some (server_infos)
   }
   in
@@ -44,10 +44,10 @@ let receive_lsp_request id req =
     let response, events = receive_lsp_request_inner id req in
     match response with
     | Ok ok_response ->
-        let response_json = Lsp.Client_request.yojson_of_result req ok_response in
+        let result_json = Lsp.Client_request.yojson_of_result req ok_response in
+        let response_json = RpcProtocolEvent.build_rpc_response id result_json in
         (Priority.Next,Send (response_json)):: events
   | _ -> []
-
 
 let receive_lsp_notification (notif : Lsp.Client_notification.t) =
   match notif with

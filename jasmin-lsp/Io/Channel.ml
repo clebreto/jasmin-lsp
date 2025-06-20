@@ -15,17 +15,19 @@ let std_channel : t = {
   err_channel = Lwt_io.stderr;
 }
 
-let write_string_to_channel (channel : t) (str: string) =
-  Lwt_io.write_chars channel.out_channel (Lwt_stream.of_string str)
+let flush_out_channel (channel:t) : unit Lwt.t = Lwt_io.flush channel.out_channel
 
+let flush_err_channel (channel:t) : unit Lwt.t = Lwt_io.flush channel.err_channel
+
+
+let write_string_to_channel (channel : t) (str: string) =
+  let %lwt _ = Lwt_io.write_chars channel.out_channel (Lwt_stream.of_string str) in
+  flush_out_channel channel
 let write_string_to_channel_err (channel : t) (str: string) =
-  Lwt_io.write_chars channel.err_channel (Lwt_stream.of_string str)
+  let %lwt _ = Lwt_io.write_chars channel.err_channel (Lwt_stream.of_string str) in
+  flush_err_channel channel
 
 let read_raw_line (channel:t) : string Lwt.t = Lwt_io.read_line channel.in_channel
 
 let read_raw_chars (channel:t) (size:int) : string Lwt.t = Lwt_io.read ~count:size channel.in_channel
-
-let flush_out_channel (channel:t) : unit Lwt.t = Lwt_io.flush channel.out_channel
-
-let flush_err_channel (channel:t) : unit Lwt.t = Lwt_io.flush channel.err_channel
 
