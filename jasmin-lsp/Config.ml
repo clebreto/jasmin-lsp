@@ -9,6 +9,26 @@ let channels = Io.Channel.std_channel
 let conf_request_id = max_int
 
 
+type config = {
+  jasmin_root : string;
+  arch : string;
+}[@@deriving yojson]
+
+let config_value = ref None
+
+let set_configuration (conf_path: string) =
+  let conf_str = Io.Channel.read_file conf_path in
+  try
+    let config = config_of_yojson (Yojson.Safe.from_string conf_str) in
+    config_value := Some config;
+    Io.Logger.log (Format.asprintf "Configuration set: %s\n" conf_path)
+  with
+  |  _ ->
+      Io.Logger.log (Format.asprintf "Failed to parse configuration\n");
+      exit 1
+
+
+
 let capabilities: Lsp.Types.ServerCapabilities.t =
   let open Lsp.Types in
   let jazz_pattern = FileOperationPattern.{

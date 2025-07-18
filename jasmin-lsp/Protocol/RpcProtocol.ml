@@ -70,11 +70,11 @@ let read_rpc_headers () : (request_headers, EventError.t) result Lwt.t =
                 in loop new_headers
               end
             | _ ->
-                Logger.log (Format.asprintf "Invalid header format: %s\n" line);
+                Io.Logger.log (Format.asprintf "Invalid header format: %s\n" line);
                 Lwt.return (Error EventError.ParseError)
         with
         | Scanf.Scan_failure _ ->
-            Logger.log (Format.asprintf "Failed scan: %s\n" line);
+            Io.Logger.log (Format.asprintf "Failed scan: %s\n" line);
             Lwt.return (Error EventError.ParseError)
   in
   loop empty_headers
@@ -120,10 +120,10 @@ let read_json_rpc () : (Jsonrpc.Packet.t, EventError.t) result Lwt.t =
         Lwt.return (Ok packet)
       with
       | Yojson.Json_error err ->
-          Logger.log (Format.asprintf "Failed to decode JSON-RPC packet: %s" err);
+          Io.Logger.log (Format.asprintf "Failed to decode JSON-RPC packet: %s" err);
           Lwt.return (Error (EventError.ParseError))
       | _ ->
-          Logger.log "Unexpected error while decoding JSON-RPC packet";
+          Io.Logger.log "Unexpected error while decoding JSON-RPC packet";
           Lwt.return (Error (EventError.ParseError))
 
 let write_json_rpc (json: Yojson.Safe.t) =
@@ -138,20 +138,20 @@ let write_json_rpc (json: Yojson.Safe.t) =
 Handlers for receiving each kind of JSON-RPC packet.
 These functions should call the appropriate LSP protocol functions see [LspProtocol.ml]
 *)
-let receive_rpc_request (req : Jsonrpc.Request.t) =
+let receive_rpc_request (req : Jsonrpc.Request.t) prog =
   let id = req.id in
   let req = Lsp.Client_request.of_jsonrpc req in
   match req with
   | Error err ->
-      Logger.log (Format.asprintf "Failed to decode request: %s\n" err);
+      Io.Logger.log (Format.asprintf "Failed to decode request: %s\n" err);
       []
-  | Ok req -> LspProtocol.receive_lsp_request id req
+  | Ok req -> LspProtocol.receive_lsp_request id req prog
 
 let receive_rpc_notification (notif : Jsonrpc.Notification.t) =
   let lsp_notif = Lsp.Client_notification.of_jsonrpc notif in
   match lsp_notif with
   | Error err ->
-      Logger.log (Format.asprintf "Failed to decode notification: %s\n" err);
+      Io.Logger.log (Format.asprintf "Failed to decode notification: %s\n" err);
       []
   | Ok notif -> LspProtocol.receive_lsp_notification notif
 
@@ -162,21 +162,21 @@ let receive_rpc_batch_response (_ : Jsonrpc.Response.t list) = []
 
 let receive_rpc_batch_call (_) = []
 
-let handle_rpc_packet (packet : Jsonrpc.Packet.t) : (Priority.t * RpcProtocolEvent.t) list =
+let handle_rpc_packet (packet : Jsonrpc.Packet.t) (prog) : (Priority.t * RpcProtocolEvent.t) list =
   match packet with
-  | Request req -> receive_rpc_request req
+  | Request req -> receive_rpc_request req prog
   | Notification notif -> receive_rpc_notification notif
   | Response resp -> receive_rpc_response resp
   | Batch_response batch_resp -> receive_rpc_batch_response batch_resp
   | Batch_call batch_call -> receive_rpc_batch_call batch_call
 
-let receive_rpc_packet () : ((Priority.t * RpcProtocolEvent.t) list, EventError.t) result Lwt.t  =
+let receive_rpc_packet prog : ((Priority.t * RpcProtocolEvent.t) list, EventError.t) result Lwt.t  =
   let%lwt rpc = read_json_rpc () in
   let result = match rpc with
     | Error e -> Error e
     | Ok packet ->
-      Logger.log (Format.asprintf "Received RPC packet: %s" (Yojson.Safe.to_string (Jsonrpc.Packet.yojson_of_t packet)));
-      Ok (handle_rpc_packet packet)
+      Io.Logger.log (Format.asprintf "Received RPC packet: %s" (Yojson.Safe.to_string (Jsonrpc.Packet.yojson_of_t packet)));
+      Ok (handle_rpc_packet packet prog)
   in
   Lwt.return result
 

@@ -31,3 +31,8 @@ let read_raw_line (channel:t) : string Lwt.t = Lwt_io.read_line channel.in_chann
 
 let read_raw_chars (channel:t) (size:int) : string Lwt.t = Lwt_io.read ~count:size channel.in_channel
 
+let read_file (filename: string) : string =
+  let ic = open_in filename in
+  let content = really_input_string ic (in_channel_length ic) in
+  close_in ic;
+  content
