@@ -1,4 +1,5 @@
 (lang dune 3.8)
+(name jasmin-lsp)
 (version 0.0.1)
 (license MIT)
 (maintainers "Jasmin Compiler Team")

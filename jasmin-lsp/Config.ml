@@ -1,13 +1,14 @@
 
 
 
+open Ppx_yojson_conv_lib.Yojson_conv.Primitives
+
 let name = "jasmin-lsp"
 let version = "0.1.0"
 
 let channels = Io.Channel.std_channel
 
 let conf_request_id = max_int
-
 
 type config = {
   jasmin_root : string;

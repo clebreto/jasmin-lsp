@@ -2,7 +2,7 @@
  (name jasmin_lsp)
  (public_name jasmin-lsp)
  (flags (:standard -w -27 -g))
- (libraries jasmin.jasmin lsp yojson lwt lwt.unix cmdliner batteries)
+ (libraries jasmin.jasmin lsp yojson lwt lwt.unix cmdliner batteries ppx_yojson_conv_lib)
  (preprocess
    (pps ppx_yojson_conv lwt_ppx)
  )
