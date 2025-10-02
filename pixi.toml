@@ -1,0 +1,24 @@
+[project]
+name = "jasmin-lsp"
+version = "0.0.1"
+description = "Jasmin Language Server Protocol (LSP) implementation"
+channels = ["conda-forge"]
+platforms = ["osx-arm64"]
+
+[dependencies]
+gmp = "*"
+mpfr = "*"
+pkgconf = "*"
+ppl = "*"
+
+[activation.env]
+C_INCLUDE_PATH = "$CONDA_PREFIX/include"
+CPLUS_INCLUDE_PATH = "$CONDA_PREFIX/include"
+LIBRARY_PATH = "$CONDA_PREFIX/lib"
+LD_LIBRARY_PATH = "$CONDA_PREFIX/lib"
+PKG_CONFIG_PATH = "$CONDA_PREFIX/lib/pkgconfig"
+CFLAGS = "-I$CONDA_PREFIX/include"
+LDFLAGS = "-L$CONDA_PREFIX/lib"
+
+[tasks]
+install = "opam install . --assume-depexts --working-dir"
