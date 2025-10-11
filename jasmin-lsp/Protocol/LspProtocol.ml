@@ -171,19 +171,22 @@ let receive_text_document_definition_request (params : Lsp.Types.DefinitionParam
                 (* Not in current file, search all files including dependencies *)
                 Io.Logger.log "Not found in current file, searching other files and dependencies";
                 let all_uris = get_all_relevant_files uri in
-                let rec search_files uris =
+                let rec search_files uris acc_trees =
                   match uris with
-                  | [] -> None
+                  | [] -> 
+                      (* Keep trees alive *)
+                      let _ = acc_trees in
+                      None
                   | search_uri :: rest ->
                       if search_uri = uri then
                         (* Skip current file, already searched *)
-                        search_files rest
+                        search_files rest acc_trees
                       else
                         (* Try to load the file if not already open *)
-                        let tree_opt, source_opt = 
+                        let tree_opt, source_opt, new_tree = 
                           match Document.DocumentStore.get_tree (!server_state).document_store search_uri,
                                 Document.DocumentStore.get_text (!server_state).document_store search_uri with
-                          | Some t, Some s -> Some t, Some s
+                          | Some t, Some s -> Some t, Some s, None
                           | _ ->
                               (* File not open, try to load it from disk *)
                               try
@@ -195,22 +198,48 @@ let receive_text_document_definition_request (params : Lsp.Types.DefinitionParam
                                   close_in ic;
                                   let parser = Document.DocumentStore.get_parser () in
                                   let parsed_tree = TreeSitter.parser_parse_string parser content in
-                                  parsed_tree, Some content
-                                ) else None, None
-                              with _ -> None, None
+                                  (match parsed_tree with
+                                  | Some t -> Some t, Some content, Some t
+                                  | None -> None, Some content, None)
+                                ) else None, None, None
+                              with e ->
+                                Io.Logger.log (Format.asprintf "Error loading file %s: %s" 
+                                  (Lsp.Types.DocumentUri.to_string search_uri)
+                                  (Printexc.to_string e));
+                                None, None, None
                         in
-                        (match tree_opt, source_opt with
-                        | Some search_tree, Some search_source ->
-                            let search_symbols = Document.SymbolTable.extract_symbols search_uri search_source search_tree in
-                            (match Document.SymbolTable.find_definition search_symbols symbol_name with
-                            | Some symbol ->
-                                Io.Logger.log (Format.asprintf "Found definition in file: %s" 
-                                  (Lsp.Types.DocumentUri.to_string search_uri));
-                                Some symbol
-                            | None -> search_files rest)
-                        | _ -> search_files rest)
+                        (* Add new tree to accumulator *)
+                        let new_acc = match new_tree with
+                          | Some t -> t :: acc_trees
+                          | None -> acc_trees
+                        in
+                        (* Extract symbols immediately while tree is still valid *)
+                        let result = 
+                          try
+                            match tree_opt, source_opt with
+                            | Some search_tree, Some search_source ->
+                                let search_symbols = Document.SymbolTable.extract_symbols search_uri search_source search_tree in
+                                (match Document.SymbolTable.find_definition search_symbols symbol_name with
+                                | Some symbol ->
+                                    Io.Logger.log (Format.asprintf "Found definition in file: %s" 
+                                      (Lsp.Types.DocumentUri.to_string search_uri));
+                                    (* Keep trees alive *)
+                                    let _ = new_acc in
+                                    Some symbol
+                                | None -> None)
+                            | _ -> None
+                          with e ->
+                            Io.Logger.log (Format.asprintf "Error extracting symbols from %s: %s\n%s" 
+                              (Lsp.Types.DocumentUri.to_string search_uri)
+                              (Printexc.to_string e)
+                              (Printexc.get_backtrace ()));
+                            None
+                        in
+                        match result with
+                        | Some symbol -> Some symbol
+                        | None -> search_files rest new_acc
                 in
-                match search_files all_uris with
+                match search_files all_uris [] with
                 | Some symbol ->
                     let location = Lsp.Types.Location.create
                       ~uri:symbol.uri
@@ -263,34 +292,60 @@ let receive_text_document_references_request (params : Lsp.Types.ReferenceParams
           
           (* Search all relevant files including dependencies *)
           let all_uris = get_all_relevant_files uri in
-          let all_references = List.fold_left (fun acc doc_uri ->
-            (* Try to get the document from store or load from disk *)
-            let tree_opt, source_opt =
-              match Document.DocumentStore.get_tree (!server_state).document_store doc_uri,
-                    Document.DocumentStore.get_text (!server_state).document_store doc_uri with
-              | Some t, Some s -> Some t, Some s
-              | _ ->
-                  (* File not open, try to load it from disk *)
-                  try
-                    let path = Lsp.Uri.to_path doc_uri in
-                    if Sys.file_exists path then (
-                      let ic = open_in path in
-                      let len = in_channel_length ic in
-                      let content = really_input_string ic len in
-                      close_in ic;
-                      let parser = Document.DocumentStore.get_parser () in
-                      let parsed_tree = TreeSitter.parser_parse_string parser content in
-                      parsed_tree, Some content
-                    ) else None, None
-                  with _ -> None, None
-            in
-            match tree_opt, source_opt with
-            | Some doc_tree, Some doc_source ->
-                let references = Document.SymbolTable.extract_references doc_uri doc_source doc_tree in
-                let matching_refs = Document.SymbolTable.find_references_to references symbol_name in
-                acc @ matching_refs
-            | _ -> acc
-          ) [] all_uris in
+          let all_references, _ = List.fold_left (fun (acc, trees) doc_uri ->
+            try
+              (* Try to get the document from store or load from disk *)
+              let tree_opt, source_opt, new_tree =
+                match Document.DocumentStore.get_tree (!server_state).document_store doc_uri,
+                      Document.DocumentStore.get_text (!server_state).document_store doc_uri with
+                | Some t, Some s -> Some t, Some s, None
+                | _ ->
+                    (* File not open, try to load it from disk *)
+                    try
+                      let path = Lsp.Uri.to_path doc_uri in
+                      if Sys.file_exists path then (
+                        let ic = open_in path in
+                        let len = in_channel_length ic in
+                        let content = really_input_string ic len in
+                        close_in ic;
+                        let parser = Document.DocumentStore.get_parser () in
+                        let parsed_tree = TreeSitter.parser_parse_string parser content in
+                        (match parsed_tree with
+                        | Some t -> Some t, Some content, Some t
+                        | None -> None, Some content, None)
+                      ) else None, None, None
+                    with e ->
+                      Io.Logger.log (Format.asprintf "Error loading file %s: %s"
+                        (Lsp.Types.DocumentUri.to_string doc_uri)
+                        (Printexc.to_string e));
+                      None, None, None
+              in
+              (* Keep new tree in accumulator *)
+              let new_trees = match new_tree with
+                | Some t -> t :: trees
+                | None -> trees
+              in
+              (* Extract references immediately while tree is valid *)
+              (try
+                match tree_opt, source_opt with
+                | Some doc_tree, Some doc_source ->
+                    let references = Document.SymbolTable.extract_references doc_uri doc_source doc_tree in
+                    let matching_refs = Document.SymbolTable.find_references_to references symbol_name in
+                    (acc @ matching_refs, new_trees)
+                | _ -> (acc, new_trees)
+              with e ->
+                Io.Logger.log (Format.asprintf "Error extracting references from %s: %s\n%s"
+                  (Lsp.Types.DocumentUri.to_string doc_uri)
+                  (Printexc.to_string e)
+                  (Printexc.get_backtrace ()));
+                (acc, new_trees))
+            with e ->
+              Io.Logger.log (Format.asprintf "Error processing file %s: %s\n%s"
+                (Lsp.Types.DocumentUri.to_string doc_uri)
+                (Printexc.to_string e)
+                (Printexc.get_backtrace ()));
+              (acc, trees)
+          ) ([], []) all_uris in
           
           let locations = List.map (fun ref ->
             Lsp.Types.Location.create
@@ -364,43 +419,75 @@ let receive_text_document_hover_request (params : Lsp.Types.HoverParams.t) =
           ) else (
           (* Search across all documents including dependencies *)
           let all_uris = get_all_relevant_files uri in
-          let rec search_documents uris =
+          let rec search_documents uris acc_trees =
             match uris with
-            | [] -> None
+            | [] -> 
+                (* Keep trees alive until we're done searching all files *)
+                let _ = acc_trees in
+                None
             | doc_uri :: rest ->
-                (* Try to get the document from store or load from disk *)
-                let tree_opt, source_opt =
-                  match Document.DocumentStore.get_tree (!server_state).document_store doc_uri,
-                        Document.DocumentStore.get_text (!server_state).document_store doc_uri with
-                  | Some t, Some s -> Some t, Some s
-                  | _ ->
-                      (* File not open, try to load it from disk *)
-                      try
-                        let path = Lsp.Uri.to_path doc_uri in
-                        if Sys.file_exists path then (
-                          let ic = open_in path in
-                          let len = in_channel_length ic in
-                          let content = really_input_string ic len in
-                          close_in ic;
-                          let parser = Document.DocumentStore.get_parser () in
-                          let parsed_tree = TreeSitter.parser_parse_string parser content in
-                          parsed_tree, Some content
-                        ) else None, None
-                      with _ -> None, None
-                in
-                (match tree_opt, source_opt with
-                | Some doc_tree, Some doc_source ->
-                    let doc_symbols = Document.SymbolTable.extract_symbols doc_uri doc_source doc_tree in
-                    (match Document.SymbolTable.find_definition doc_symbols symbol_name with
-                    | Some symbol -> 
-                        Io.Logger.log (Format.asprintf "Hover: Found symbol '%s' in %s" 
-                          symbol_name (Lsp.Types.DocumentUri.to_string doc_uri));
-                        Some symbol
-                    | None -> search_documents rest)
-                | _ -> search_documents rest)
+                try
+                  (* Try to get the document from store or load from disk *)
+                  let tree_opt, source_opt, new_tree =
+                    match Document.DocumentStore.get_tree (!server_state).document_store doc_uri,
+                          Document.DocumentStore.get_text (!server_state).document_store doc_uri with
+                    | Some t, Some s -> Some t, Some s, None
+                    | _ ->
+                        (* File not open, try to load it from disk *)
+                        try
+                          let path = Lsp.Uri.to_path doc_uri in
+                          if Sys.file_exists path then (
+                            let ic = open_in path in
+                            let len = in_channel_length ic in
+                            let content = really_input_string ic len in
+                            close_in ic;
+                            let parser = Document.DocumentStore.get_parser () in
+                            let parsed_tree = TreeSitter.parser_parse_string parser content in
+                            (* Keep the parsed tree in a list to prevent GC *)
+                            (match parsed_tree with
+                            | Some t -> Some t, Some content, Some t
+                            | None -> None, Some content, None)
+                          ) else None, None, None
+                        with e ->
+                          Io.Logger.log (Format.asprintf "Error loading file %s: %s"
+                            (Lsp.Types.DocumentUri.to_string doc_uri)
+                            (Printexc.to_string e));
+                          None, None, None
+                  in
+                  (* Add new tree to accumulator to keep it alive *)
+                  let new_acc = match new_tree with
+                    | Some t -> t :: acc_trees
+                    | None -> acc_trees
+                  in
+                  (* Extract symbols immediately while tree is valid *)
+                  (match tree_opt, source_opt with
+                  | Some doc_tree, Some doc_source ->
+                      (try
+                        let doc_symbols = Document.SymbolTable.extract_symbols doc_uri doc_source doc_tree in
+                        (match Document.SymbolTable.find_definition doc_symbols symbol_name with
+                        | Some symbol -> 
+                            Io.Logger.log (Format.asprintf "Hover: Found symbol '%s' in %s" 
+                              symbol_name (Lsp.Types.DocumentUri.to_string doc_uri));
+                            (* Keep trees alive by referencing them *)
+                            let _ = new_acc in
+                            Some symbol
+                        | None -> search_documents rest new_acc)
+                      with e ->
+                        Io.Logger.log (Format.asprintf "Error extracting symbols from %s: %s\n%s"
+                          (Lsp.Types.DocumentUri.to_string doc_uri)
+                          (Printexc.to_string e)
+                          (Printexc.get_backtrace ()));
+                        search_documents rest new_acc)
+                  | _ -> search_documents rest new_acc)
+                with e ->
+                  Io.Logger.log (Format.asprintf "Error processing file %s: %s\n%s"
+                    (Lsp.Types.DocumentUri.to_string doc_uri)
+                    (Printexc.to_string e)
+                    (Printexc.get_backtrace ()));
+                  search_documents rest acc_trees
           in
           
-          match search_documents all_uris with
+          match search_documents all_uris [] with
           | None -> 
               Io.Logger.log (Format.asprintf "Hover: No definition found for '%s'" symbol_name);
               Ok None, []  (* Return None instead of error for unknown symbols *)
@@ -598,7 +685,9 @@ and send_diagnostics uri =
         let packet_json = Jsonrpc.Notification.yojson_of_t json in
         [(Priority.High, Send packet_json)]
   with e ->
-    Io.Logger.log (Format.asprintf "Exception in send_diagnostics: %s" (Printexc.to_string e));
+    Io.Logger.log (Format.asprintf "Exception in send_diagnostics: %s\n%s" 
+      (Printexc.to_string e) 
+      (Printexc.get_backtrace ()));
     []
 
 (** Collect diagnostics from syntax tree *)
@@ -608,41 +697,48 @@ and collect_diagnostics tree source =
     let errors = ref [] in
     
     let rec visit_node node =
-      (* Check if this node is an error node *)
-      let node_type_str = TreeSitter.node_type node in
-      let is_error = TreeSitter.node_is_error node in
-      let is_missing = TreeSitter.node_is_missing node in
-      
-      if is_error || is_missing then begin
-        Io.Logger.log (Format.asprintf "Found error node: type=%s, is_error=%b, is_missing=%b" 
-          node_type_str is_error is_missing);
-        let range = TreeSitter.node_range node in
-        let lsp_range = Document.SymbolTable.range_to_lsp_range range in
-        let message = 
-          if is_missing then
-            Format.asprintf "Missing: %s" node_type_str
-          else
-            "Syntax error"
+      try
+        (* Check if this node is an error node *)
+        let node_type_str = TreeSitter.node_type node in
+        let is_error = TreeSitter.node_is_error node in
+        let is_missing = TreeSitter.node_is_missing node in
+        
+        if is_error || is_missing then begin
+          Io.Logger.log (Format.asprintf "Found error node: type=%s, is_error=%b, is_missing=%b" 
+            node_type_str is_error is_missing);
+          let range = TreeSitter.node_range node in
+          let lsp_range = Document.SymbolTable.range_to_lsp_range range in
+          let message = 
+            if is_missing then
+              Format.asprintf "Missing: %s" node_type_str
+            else
+              "Syntax error"
+          in
+          let diagnostic = Lsp.Types.Diagnostic.create 
+            ~range:lsp_range 
+            ~message:(`String message)
+            ~severity:Lsp.Types.DiagnosticSeverity.Error
+            ()
+          in
+          errors := diagnostic :: !errors
+        end;
+        
+        (* Visit all children to find nested errors *)
+        let child_count = TreeSitter.node_named_child_count node in
+        let rec visit_children i =
+          if i < child_count then begin
+            try
+              match TreeSitter.node_named_child node i with
+              | Some child -> visit_node child; visit_children (i + 1)
+              | None -> visit_children (i + 1)
+            with e ->
+              Io.Logger.log (Format.asprintf "Exception visiting child %d: %s" i (Printexc.to_string e));
+              visit_children (i + 1)
+          end
         in
-        let diagnostic = Lsp.Types.Diagnostic.create 
-          ~range:lsp_range 
-          ~message:(`String message)
-          ~severity:Lsp.Types.DiagnosticSeverity.Error
-          ()
-        in
-        errors := diagnostic :: !errors
-      end;
-      
-      (* Visit all children to find nested errors *)
-      let child_count = TreeSitter.node_named_child_count node in
-      let rec visit_children i =
-        if i < child_count then begin
-          match TreeSitter.node_named_child node i with
-          | Some child -> visit_node child; visit_children (i + 1)
-          | None -> visit_children (i + 1)
-        end
-      in
-      visit_children 0
+        visit_children 0
+      with e ->
+        Io.Logger.log (Format.asprintf "Exception in visit_node: %s" (Printexc.to_string e))
     in
     
     visit_node root;

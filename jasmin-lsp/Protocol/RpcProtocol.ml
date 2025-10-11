@@ -139,21 +139,33 @@ Handlers for receiving each kind of JSON-RPC packet.
 These functions should call the appropriate LSP protocol functions see [LspProtocol.ml]
 *)
 let receive_rpc_request (req : Jsonrpc.Request.t) prog =
-  let id = req.id in
-  let req = Lsp.Client_request.of_jsonrpc req in
-  match req with
-  | Error err ->
-      Io.Logger.log (Format.asprintf "Failed to decode request: %s\n" err);
-      []
-  | Ok req -> LspProtocol.receive_lsp_request id req prog
+  try
+    let id = req.id in
+    let req = Lsp.Client_request.of_jsonrpc req in
+    match req with
+    | Error err ->
+        Io.Logger.log (Format.asprintf "Failed to decode request: %s\n" err);
+        []
+    | Ok req -> LspProtocol.receive_lsp_request id req prog
+  with e ->
+    Io.Logger.log (Format.asprintf "Exception in receive_rpc_request: %s\n%s" 
+      (Printexc.to_string e)
+      (Printexc.get_backtrace ()));
+    []
 
 let receive_rpc_notification (notif : Jsonrpc.Notification.t) =
-  let lsp_notif = Lsp.Client_notification.of_jsonrpc notif in
-  match lsp_notif with
-  | Error err ->
-      Io.Logger.log (Format.asprintf "Failed to decode notification: %s\n" err);
-      []
-  | Ok notif -> LspProtocol.receive_lsp_notification notif
+  try
+    let lsp_notif = Lsp.Client_notification.of_jsonrpc notif in
+    match lsp_notif with
+    | Error err ->
+        Io.Logger.log (Format.asprintf "Failed to decode notification: %s\n" err);
+        []
+    | Ok notif -> LspProtocol.receive_lsp_notification notif
+  with e ->
+    Io.Logger.log (Format.asprintf "Exception in receive_rpc_notification: %s\n%s" 
+      (Printexc.to_string e)
+      (Printexc.get_backtrace ()));
+    []
 
 (*TODO : Check if this function should raise an error*)
 let receive_rpc_response (_ : Jsonrpc.Response.t) = []

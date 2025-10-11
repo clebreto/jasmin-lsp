@@ -36,45 +36,62 @@ let parse_document parser text old_tree =
     result
   with
   | e -> 
-      Io.Logger.log (Format.asprintf "Failed to parse document: %s" (Printexc.to_string e));
+      Io.Logger.log (Format.asprintf "Failed to parse document: %s\n%s" 
+        (Printexc.to_string e)
+        (Printexc.get_backtrace ()));
       None
 
 let open_document store uri text version =
-  Io.Logger.log (Format.asprintf "Opening document: %s (version %d, %d bytes)" 
-    (Lsp.Types.DocumentUri.to_string uri) version (String.length text));
-  let tree = parse_document store.parser text None in
-  let doc = { uri; text; version; tree } in
-  store.documents <- (uri, doc) :: store.documents;
-  Io.Logger.log (Format.asprintf "Document opened: %s (tree=%s)" 
-    (Lsp.Types.DocumentUri.to_string uri)
-    (match tree with Some _ -> "Some" | None -> "None"))
+  try
+    Io.Logger.log (Format.asprintf "Opening document: %s (version %d, %d bytes)" 
+      (Lsp.Types.DocumentUri.to_string uri) version (String.length text));
+    let tree = parse_document store.parser text None in
+    let doc = { uri; text; version; tree } in
+    store.documents <- (uri, doc) :: store.documents;
+    Io.Logger.log (Format.asprintf "Document opened: %s (tree=%s)" 
+      (Lsp.Types.DocumentUri.to_string uri)
+      (match tree with Some _ -> "Some" | None -> "None"))
+  with e ->
+    Io.Logger.log (Format.asprintf "Exception in open_document: %s\n%s" 
+      (Printexc.to_string e)
+      (Printexc.get_backtrace ()))
 
 let update_document store uri text version =
-  match List.assoc_opt uri store.documents with
-  | None ->
-      Io.Logger.log (Format.asprintf "Warning: Updating non-open document %s" 
-        (Lsp.Types.DocumentUri.to_string uri));
-      open_document store uri text version
-  | Some old_doc ->
-      let tree = parse_document store.parser text old_doc.tree in
-      let doc = { uri; text; version; tree } in
-      store.documents <- (uri, doc) :: (List.remove_assoc uri store.documents);
-      Io.Logger.log (Format.asprintf "Updated document: %s (version %d)" 
-        (Lsp.Types.DocumentUri.to_string uri) version)
+  try
+    match List.assoc_opt uri store.documents with
+    | None ->
+        Io.Logger.log (Format.asprintf "Warning: Updating non-open document %s" 
+          (Lsp.Types.DocumentUri.to_string uri));
+        open_document store uri text version
+    | Some old_doc ->
+        (* Parse with old tree for incremental updates *)
+        let new_tree = parse_document store.parser text old_doc.tree in
+        let doc = { uri; text; version; tree = new_tree } in
+        (* Update the document in store *)
+        store.documents <- (uri, doc) :: (List.remove_assoc uri store.documents);
+        Io.Logger.log (Format.asprintf "Updated document: %s (version %d)" 
+          (Lsp.Types.DocumentUri.to_string uri) version)
+  with e ->
+    Io.Logger.log (Format.asprintf "Exception in update_document: %s\n%s" 
+      (Printexc.to_string e)
+      (Printexc.get_backtrace ()))
 
 let close_document store uri =
-  match List.assoc_opt uri store.documents with
-  | None ->
-      Io.Logger.log (Format.asprintf "Warning: Closing non-open document %s" 
-        (Lsp.Types.DocumentUri.to_string uri))
-  | Some doc ->
-      (* Clean up the tree if it exists *)
-      (match doc.tree with
-      | Some tree -> TreeSitter.tree_delete tree
-      | None -> ());
-      store.documents <- List.remove_assoc uri store.documents;
-      Io.Logger.log (Format.asprintf "Closed document: %s" 
-        (Lsp.Types.DocumentUri.to_string uri))
+  try
+    match List.assoc_opt uri store.documents with
+    | None ->
+        Io.Logger.log (Format.asprintf "Warning: Closing non-open document %s" 
+          (Lsp.Types.DocumentUri.to_string uri))
+    | Some doc ->
+        (* Remove document from store - tree will be garbage collected automatically *)
+        (* DO NOT manually delete the tree - it has a finalizer that will be called by GC *)
+        store.documents <- List.remove_assoc uri store.documents;
+        Io.Logger.log (Format.asprintf "Closed document: %s" 
+          (Lsp.Types.DocumentUri.to_string uri))
+  with e ->
+    Io.Logger.log (Format.asprintf "Exception in close_document: %s\n%s" 
+      (Printexc.to_string e)
+      (Printexc.get_backtrace ()))
 
 let get_document store uri =
   List.assoc_opt uri store.documents
