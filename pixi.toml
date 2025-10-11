@@ -10,6 +10,9 @@ gmp = "*"
 mpfr = "*"
 pkgconf = "*"
 ppl = "*"
+tree-sitter-cli = "0.25.*"
+libtree-sitter = "0.25.*"
+clang = "*"
 
 [activation.env]
 C_INCLUDE_PATH = "$CONDA_PREFIX/include"
@@ -21,4 +24,10 @@ CFLAGS = "-I$CONDA_PREFIX/include"
 LDFLAGS = "-L$CONDA_PREFIX/lib"
 
 [tasks]
-install = "opam install . --assume-depexts --working-dir"
+build-tree-sitter = "cd tree-sitter-jasmin && make clean && make"
+clean = "dune clean"
+build = { cmd = "dune build", depends-on = ["build-tree-sitter"] }
+test = { cmd = "dune test", depends-on = ["build"] }
+run = { cmd = "_build/default/jasmin-lsp/jasmin_lsp.exe", depends-on = ["build"] }
+install-opam = "opam install . --assume-depexts --working-dir"
+setup = { depends-on = ["build-tree-sitter", "install-opam"] }

@@ -1,0 +1,3 @@
+[submodule "tree-sitter-jasmin"]
+	path = tree-sitter-jasmin
+	url = https://github.com/jasmin-lang/tree-sitter-jasmin.git

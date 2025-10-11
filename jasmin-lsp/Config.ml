@@ -73,8 +73,24 @@ let capabilities: Lsp.Types.ServerCapabilities.t =
     ~change:(TextDocumentSyncKind.Full)
     ()) in
   let completionProvider = CompletionOptions.create () in
-  let hoverProvider = `Bool false in
+  let hoverProvider = `Bool true in
   let definitionProvider = `Bool true in
+  let referencesProvider = `Bool true in
+  let documentSymbolProvider = `Bool true in
+  let workspaceSymbolProvider = `Bool true in
+  let renameProvider = `Bool true in
+  let documentFormattingProvider = `Bool false in (* Not implemented yet *)
+  let codeActionProvider = `Bool false in (* Not implemented yet *)
   let workspace = ServerCapabilities.create_workspace ~fileOperations () in
   Lsp.Types.ServerCapabilities.create
-    ~textDocumentSync ~completionProvider ~hoverProvider ~definitionProvider ~workspace ()
+    ~textDocumentSync 
+    ~completionProvider 
+    ~hoverProvider 
+    ~definitionProvider 
+    ~referencesProvider
+    ~documentSymbolProvider
+    ~workspaceSymbolProvider
+    ~renameProvider
+    ~documentFormattingProvider
+    ~codeActionProvider
+    ~workspace ()
