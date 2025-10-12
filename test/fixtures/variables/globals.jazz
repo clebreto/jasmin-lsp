@@ -1,0 +1,4 @@
+// globals.jazz - defines global variables
+param int BUFFER_SIZE = 256;
+
+u64[4] shared_data = {1, 2, 3, 4};

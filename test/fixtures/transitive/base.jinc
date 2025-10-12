@@ -1,0 +1,8 @@
+// Base file - defines a global variable
+param int BASE_CONSTANT = 42;
+
+fn base_function(reg u64 x) -> reg u64 {
+  reg u64 result;
+  result = x + BASE_CONSTANT;
+  return result;
+}

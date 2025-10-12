@@ -32,3 +32,6 @@ _opam/
 .idea/
 .vscode/
 .zed/
+
+# Pixi
+.pixi/

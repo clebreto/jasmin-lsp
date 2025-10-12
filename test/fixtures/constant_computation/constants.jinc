@@ -1,0 +1,9 @@
+// Test file with constants built from other constants
+param int BASE = 100;
+param int OFFSET = 50;
+param int TOTAL = BASE + OFFSET;
+param int DOUBLED = TOTAL * 2;
+param int SHIFTED = 1 << 10;
+param int START_OF_HINT_IN_SIGNATURE = 200;
+param int HINT_ENCODED_SIZE = 150;
+param int SIGNATURE_SIZE = START_OF_HINT_IN_SIGNATURE + HINT_ENCODED_SIZE;

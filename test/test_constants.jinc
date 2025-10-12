@@ -1,0 +1,11 @@
+// Test file with various constant types
+param int SIMPLE = 42;
+param int EXPRESSION = (1 << 19) - 1;
+param int HEX_VALUE = 0x1000;
+param u64 LARGE = 18446744073709551615;
+
+fn test_function() {
+  reg u64 x;
+  x = SIMPLE;
+  x = EXPRESSION;
+}

@@ -1,0 +1,23 @@
+// File with intentional syntax errors for diagnostic testing
+
+fn missing_semicolon(reg u64 x) -> reg u64 {
+  reg u64 y;
+  y = x + 1  // Missing semicolon here
+  return y;
+}
+
+fn broken_syntax {
+  // Missing parameter list and return type
+  reg u64 z;
+}
+
+fn unclosed_brace(reg u64 a) -> reg u64 {
+  reg u64 b;
+  b = a;
+  return b;
+// Missing closing brace
+
+fn extra_token(reg u64 c) -> reg u64 } {
+  // Extra closing brace in signature
+  return c;
+}

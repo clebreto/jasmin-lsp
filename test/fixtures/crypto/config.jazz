@@ -1,0 +1,7 @@
+// Cryptographic configuration parameters
+// This file defines compile-time constants used throughout the crypto library
+
+param int CHACHA_ROUNDS = 20;
+param int BLOCK_SIZE = 64;
+param int KEY_SIZE = 32;
+param int NONCE_SIZE = 12;

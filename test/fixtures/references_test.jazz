@@ -1,0 +1,27 @@
+// Test file for find references functionality
+
+fn calculate(reg u64 value) -> reg u64 {
+  reg u64 temp;
+  reg u64 result;
+  
+  // Multiple uses of 'value' parameter
+  temp = value + #10;
+  result = value * temp;
+  
+  if (value > #100) {
+    result = value - #50;
+  }
+  
+  return result;
+}
+
+fn use_calculate() -> reg u64 {
+  reg u64 x;
+  reg u64 y;
+  
+  // Multiple calls to calculate function
+  x = calculate(#42);
+  y = calculate(#100);
+  
+  return x + y;
+}

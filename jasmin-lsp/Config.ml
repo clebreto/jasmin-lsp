@@ -19,7 +19,7 @@ let config_value = ref None
 
 let set_configuration (conf_path: string) =
   let conf_str = Io.Channel.read_file conf_path in
-  try
+c2cv  try
     let config = config_of_yojson (Yojson.Safe.from_string conf_str) in
     config_value := Some config;
     Io.Logger.log (Format.asprintf "Configuration set: %s\n" conf_path)

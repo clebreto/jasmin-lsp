@@ -1,0 +1,25 @@
+// Test file with arrays and more complex structures
+
+fn array_access(reg u64[4] arr) -> reg u64 {
+  reg u64 element;
+  reg u64 sum;
+  
+  element = arr[0];
+  sum = element + arr[1];
+  sum = sum + arr[2];
+  sum = sum + arr[3];
+  
+  return sum;
+}
+
+fn array_modify(reg u64[8] buffer, reg u64 value) -> reg u64[8] {
+  reg u64 i;
+  
+  i = #0;
+  while (i < #8) {
+    buffer[i] = value;
+    i = i + #1;
+  }
+  
+  return buffer;
+}

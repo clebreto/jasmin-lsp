@@ -1,0 +1,61 @@
+// Main encryption module
+// Demonstrates cross-file variable references
+
+require "config.jazz"
+require "state.jazz"
+
+fn chacha20_init(reg u64 key_ptr, reg u64 nonce_ptr) -> reg u64 {
+  reg u64 rounds;
+  reg u64 block_sz;
+  reg u32 state_val;
+  
+  // Reference to params from config.jazz
+  // Click on these to jump to config.jazz!
+  rounds = CHACHA_ROUNDS;    // ← Go to definition works!
+  block_sz = BLOCK_SIZE;     // ← Go to definition works!
+  
+  // Reference to global from state.jazz
+  // Click on this to jump to state.jazz!
+  state_val = chacha_state[0];  // ← Go to definition works!
+  
+  return rounds;
+}
+
+fn chacha20_encrypt_block(reg u64 input_ptr, reg u64 output_ptr) -> reg u64 {
+  reg u64 i;
+  reg u64 rounds;
+  reg u64 key_sz;
+  reg u32 counter_val;
+  
+  // More cross-file references
+  rounds = CHACHA_ROUNDS;       // ← Works!
+  key_sz = KEY_SIZE;            // ← Works!
+  counter_val = chacha_state[12];  // ← Works!
+  
+  // Perform encryption rounds
+  i = 0;
+  while (i < rounds) {
+    // ... encryption logic ...
+    i = i + 1;
+  }
+  
+  return i;
+}
+
+export fn chacha20_process(
+  reg u64 plaintext_ptr,
+  reg u64 ciphertext_ptr,
+  reg u64 len
+) -> reg u64 {
+  reg u64 blocks;
+  reg u64 block_size;
+  reg u64 nonce_size;
+  
+  // References to all config params
+  block_size = BLOCK_SIZE;   // ← Works!
+  nonce_size = NONCE_SIZE;   // ← Works!
+  
+  blocks = len / block_size;
+  
+  return blocks;
+}

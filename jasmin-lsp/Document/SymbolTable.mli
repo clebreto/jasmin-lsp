@@ -49,6 +49,9 @@ val find_references_to : reference list -> string -> reference list
 (** Find the definition of a symbol by name *)
 val find_definition : symbol list -> string -> symbol option
 
+(** Find the definition of a symbol by name, scoped to the function containing the position *)
+val find_definition_at_position : symbol list -> string -> TreeSitter.point -> symbol option
+
 (** Convert symbol to LSP SymbolInformation *)
 val symbol_to_lsp : symbol -> Lsp.Types.SymbolInformation.t
 

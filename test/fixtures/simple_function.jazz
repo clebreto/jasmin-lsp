@@ -1,0 +1,22 @@
+// Simple function with basic types
+fn add_numbers(reg u64 x, reg u64 y) -> reg u64 {
+  reg u64 result;
+  result = x + y;
+  return result;
+}
+
+fn multiply(reg u64 a, reg u64 b) -> reg u64 {
+  reg u64 product;
+  product = a * b;
+  return product;
+}
+
+export fn main(reg u64 input) -> reg u64 {
+  reg u64 temp;
+  reg u64 output;
+  
+  temp = add_numbers(input, #42);
+  output = multiply(temp, #2);
+  
+  return output;
+}

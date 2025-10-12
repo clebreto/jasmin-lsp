@@ -1,0 +1,3 @@
+(executable
+  (name test_param_structure)
+  (libraries jasmin-lsp.TreeSitter))

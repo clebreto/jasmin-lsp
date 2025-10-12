@@ -1,0 +1,13 @@
+// Main file
+require "lib/types.jinc";
+require "lib/utils.jinc";
+
+export fn main() -> reg u64 {
+    reg u64 x;
+    reg u64 y;
+    
+    x = 5;
+    y = process(x);
+    
+    return y;
+}

@@ -127,6 +127,44 @@ let extract_symbols_with_values uri source tree all_uris =
   (* Enhance constants with computed values *)
   Document.SymbolTable.enhance_constants_with_values symbols source_map
 
+(** Find the innermost identifier or variable node at or containing the given point *)
+let rec find_identifier_at_point node point =
+  let node_type = TreeSitter.node_type node in
+  
+  (* If this node is an identifier or variable, return it *)
+  if node_type = "identifier" || node_type = "variable" then
+    Some node
+  else
+    (* Otherwise, check all children (including unnamed ones) *)
+    let child_count = TreeSitter.node_child_count node in
+    let rec check_children i best =
+      if i >= child_count then best
+      else
+        match TreeSitter.node_child node i with
+        | None -> check_children (i + 1) best
+        | Some child ->
+            let child_range = TreeSitter.node_range child in
+            let start_point = child_range.start_point in
+            let end_point = child_range.end_point in
+            
+            (* Check if point is within this child *)
+            let point_in_child = 
+              (point.TreeSitter.row > start_point.row || 
+               (point.TreeSitter.row = start_point.row && point.TreeSitter.column >= start_point.column)) &&
+              (point.TreeSitter.row < end_point.row || 
+               (point.TreeSitter.row = end_point.row && point.TreeSitter.column <= end_point.column))
+            in
+            
+            if point_in_child then (
+              (* Point is within this child, recursively search it *)
+              match find_identifier_at_point child point with
+              | Some id -> Some id  (* Found an identifier, return immediately *)
+              | None -> check_children (i + 1) best
+            ) else
+              check_children (i + 1) best
+    in
+    check_children 0 None
+
 let receive_text_document_definition_request (params : Lsp.Types.DefinitionParams.t) (prog:('info,'asm) Jasmin.Prog.prog option) =
   let uri = params.textDocument.uri in
   let position = params.position in
@@ -174,9 +212,12 @@ let receive_text_document_definition_request (params : Lsp.Types.DefinitionParam
       
       (* Find the node at cursor position *)
       (match TreeSitter.node_at_point root point with
-      | None -> Error "No symbol at position", []
+      | None -> 
+          Io.Logger.log "node_at_point returned None";
+          Error "No symbol at position", []
       | Some node ->
           let node_type = TreeSitter.node_type node in
+          Io.Logger.log (Format.asprintf "node_at_point returned node of type: %s" node_type);
           
           (* Check if cursor is on a string literal in a require statement *)
           if (node_type = "string_literal" || node_type = "string_content") && is_in_require_statement node then (
@@ -207,23 +248,28 @@ let receive_text_document_definition_request (params : Lsp.Types.DefinitionParam
             | None ->
                 Error "Required file not found", []
           ) else (
-            (* Standard symbol-based goto definition *)
-            let symbol_name = TreeSitter.node_text node source in
-            Io.Logger.log (Format.asprintf "Looking for definition of symbol: %s" symbol_name);
-            
-            (* First try to find in current file *)
-            match Document.SymbolTable.find_definition symbols symbol_name with
-            | Some symbol ->
-                Io.Logger.log (Format.asprintf "Found definition in current file");
-                let location = Lsp.Types.Location.create
-                  ~uri:symbol.uri
-                  ~range:(Document.SymbolTable.range_to_lsp_range symbol.definition_range)
-                in
-                Ok (Some (`Location [location])), []
+            (* Standard symbol-based goto definition - find identifier node *)
+            match find_identifier_at_point node point with
             | None ->
-                (* Not in current file, search all files including dependencies *)
-                Io.Logger.log "Not found in current file, searching other files and dependencies";
-                let all_uris = get_all_relevant_files uri in
+                Io.Logger.log "No identifier found at cursor position";
+                Error "No symbol at position", []
+            | Some id_node ->
+                let symbol_name = TreeSitter.node_text id_node source in
+                Io.Logger.log (Format.asprintf "Looking for definition of symbol: %s" symbol_name);
+            
+                (* First try to find in current file *)
+                match Document.SymbolTable.find_definition_at_position symbols symbol_name point with
+                | Some symbol ->
+                    Io.Logger.log (Format.asprintf "Found definition in current file");
+                    let location = Lsp.Types.Location.create
+                      ~uri:symbol.uri
+                      ~range:(Document.SymbolTable.range_to_lsp_range symbol.definition_range)
+                    in
+                    Ok (Some (`Location [location])), []
+                | None ->
+                    (* Not in current file, search all files including dependencies *)
+                    Io.Logger.log "Not found in current file, searching other files and dependencies";
+                    let all_uris = get_all_relevant_files uri in
                 let rec search_files uris acc_trees =
                   match uris with
                   | [] -> 
@@ -304,11 +350,17 @@ let receive_text_document_definition_request (params : Lsp.Types.DefinitionParam
                     Error "No definition found", []
           ))
   | _ ->
-      Io.Logger.log (Format.asprintf "No tree or source available for %s" 
-        (Lsp.Types.DocumentUri.to_string uri));
+      let tree_available = Document.DocumentStore.get_tree (!server_state).document_store uri in
+      let source_available = Document.DocumentStore.get_text (!server_state).document_store uri in
+      Io.Logger.log (Format.asprintf "No tree or source available for %s (tree=%b, source=%b)" 
+        (Lsp.Types.DocumentUri.to_string uri)
+        (Option.is_some tree_available)
+        (Option.is_some source_available));
       (* Fallback to old Jasmin AST-based approach *)
       match params.partialResultToken with
-      | None -> Error "No text document provided", []
+      | None -> 
+          Io.Logger.log "No partialResultToken provided, cannot use AST fallback";
+          Error "No text document provided", []
       | Some text_doc ->
         match text_doc with
         | `Int id -> Error "Invalid token type", []

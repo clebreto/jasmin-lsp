@@ -1,0 +1,40 @@
+// Main program that uses functions from math_lib.jazz
+// Tests cross-file goto definition and references
+
+require "math_lib.jazz"
+
+export fn compute(reg u64 input) -> reg u64 {
+  reg u64 temp1;
+  reg u64 temp2;
+  reg u64 result;
+  
+  // Call functions from math_lib.jazz
+  // Testing goto definition should jump to math_lib.jazz
+  temp1 = square(input);
+  temp2 = double(temp1);
+  result = add(temp2, #100);
+  
+  return result;
+}
+
+fn process_values(reg u64 x, reg u64 y) -> reg u64 {
+  reg u64 sum;
+  reg u64 diff;
+  reg u64 result;
+  
+  // More cross-file function calls
+  sum = add(x, y);
+  diff = subtract(x, y);
+  result = square(sum) + square(diff);
+  
+  return result;
+}
+
+export fn main() -> reg u64 {
+  reg u64 output;
+  
+  output = compute(#10);
+  output = increment(output);
+  
+  return output;
+}

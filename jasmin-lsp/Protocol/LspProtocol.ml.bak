@@ -1,0 +1,355 @@
+open RpcProtocolEvent
+
+(** Global server state *)
+let server_state = ref (ServerState.create ())
+
+
+
+let get_initialize_response (params : Lsp.Types.InitializeParams.t) =
+  let param_options = params.initializationOptions in
+  let _ = match param_options with
+  | None -> Io.Logger.log  "Failed to decode initialization options\n"; ()
+  | Some _ -> ()
+  in
+  let server_infos = Lsp.Types.InitializeResult.create_serverInfo
+    ~name:Config.name
+    ~version:Config.version
+    ()
+  in
+  let content = Lsp.Types.InitializeResult.{
+    capabilities= Config.capabilities;
+    serverInfo=Some (server_infos)
+  }
+  in
+  content
+
+let configuration_request =
+  let id = `Int Config.conf_request_id in
+  let items = [
+    Lsp.Types.ConfigurationItem.{ scopeUri = None; section = Some (Config.name) }] in
+  let content = Lsp.Server_request.(to_jsonrpc_request (WorkspaceConfiguration { items }) ~id) in
+  Jsonrpc.Packet.Request content
+
+let receive_initialize_request (params : Lsp.Types.InitializeParams.t) =
+  let initialize_response = get_initialize_response params in
+  let config = Jsonrpc.Packet.yojson_of_t configuration_request in
+  Ok(initialize_response), [(Priority.Low, Send config)]
+
+let receive_text_document_definition_request (params : Lsp.Types.DefinitionParams.t) (prog:('info,'asm) Jasmin.Prog.prog option) =
+  let uri = params.textDocument.uri in
+  let position = params.position in
+  let point = { TreeSitter.row = position.line; column = position.character } in
+  
+  (* Try tree-sitter based approach first *)
+  match Document.DocumentStore.get_tree (!server_state).document_store uri,
+        Document.DocumentStore.get_text (!server_state).document_store uri with
+  | Some tree, Some source ->
+      let symbols = Document.SymbolTable.extract_symbols uri source tree in
+      let root = TreeSitter.TreeSitter.tree_root_node tree in
+      
+      (* Find the node at cursor position *)
+      (match TreeSitter.TreeSitter.node_at_point root point with
+      | None -> Error "No symbol at position", []
+      | Some node ->
+          let symbol_name = TreeSitter.TreeSitter.node_text node source in
+          
+          (* Find the definition *)
+          match Document.SymbolTable.find_definition symbols symbol_name with
+          | None -> Error "No definition found", []
+          | Some symbol ->
+              let location = Lsp.Types.Location.create
+                ~uri:symbol.uri
+                ~range:(Document.SymbolTable.range_to_lsp_range symbol.definition_range)
+              in
+              Ok (Some (`Location [location])), [])
+  | _ ->
+      (* Fallback to old Jasmin AST-based approach *)
+      match params.partialResultToken with
+      | None -> Error "No text document provided", []
+      | Some text_doc ->
+        match text_doc with
+        | `Int id -> Error "Invalid token type", []
+        | `String name ->
+          match prog with
+          | None -> Error "Static program not set", []
+          | Some prog ->
+            let pos = (Lsp.Types.DocumentUri.to_string params.textDocument.uri, (params.position.character, params.position.line)) in
+            let definition = Document.AstIndex.find_definition (name, pos) prog in
+            match definition with
+            | None -> Error "No definition found", []
+            | Some (loc_start,loc_end,loc_file) ->
+              let rg = Lsp.Types.Range.create ~end_:loc_end ~start:loc_start in
+              let def = Some (`Location [(Lsp.Types.Location.create ~range:rg ~uri:loc_file)]) in
+                Ok(def), []
+
+(** Handle find references request *)
+let receive_text_document_references_request (params : Lsp.Types.ReferenceParams.t) =
+  let uri = params.textDocument.uri in
+  let position = params.position in
+  let point = { TreeSitter.TreeSitter.row = position.line; column = position.character } in
+  
+  match Document.DocumentStore.get_tree (!server_state).document_store uri,
+        Document.DocumentStore.get_text (!server_state).document_store uri with
+  | Some tree, Some source ->
+      let root = TreeSitter.TreeSitter.tree_root_node tree in
+      
+      (* Find the symbol at cursor *)
+      (match TreeSitter.TreeSitter.node_at_point root point with
+      | None -> Error "No symbol at position", []
+      | Some node ->
+          let symbol_name = TreeSitter.TreeSitter.node_text node source in
+          
+          (* Extract all references *)
+          let references = Document.SymbolTable.extract_references uri source tree in
+          let matching_refs = Document.SymbolTable.find_references_to references symbol_name in
+          
+          let locations = List.map (fun ref ->
+            Lsp.Types.Location.create
+              ~uri:ref.Document.SymbolTable.uri
+              ~range:(Document.SymbolTable.range_to_lsp_range ref.Document.SymbolTable.range)
+          ) matching_refs in
+          
+          Ok locations, [])
+  | _ -> Error "Document not open or not parsed", []
+
+(** Handle hover request *)
+let receive_text_document_hover_request (params : Lsp.Types.HoverParams.t) =
+  let uri = params.textDocument.uri in
+  let position = params.position in
+  let point = { TreeSitter.TreeSitter.row = position.line; column = position.character } in
+  
+  match Document.DocumentStore.get_tree (!server_state).document_store uri,
+        Document.DocumentStore.get_text (!server_state).document_store uri with
+  | Some tree, Some source ->
+      let symbols = Document.SymbolTable.extract_symbols uri source tree in
+      let root = TreeSitter.TreeSitter.tree_root_node tree in
+      
+      (* Find the symbol at cursor *)
+      (match TreeSitter.TreeSitter.node_at_point root point with
+      | None -> Error "No symbol at position", []
+      | Some node ->
+          let symbol_name = TreeSitter.TreeSitter.node_text node source in
+          
+          (* Find the definition to get type info *)
+          match Document.SymbolTable.find_definition symbols symbol_name with
+          | None -> Error "No hover information available", []
+          | Some symbol ->
+              let content = match symbol.detail with
+              | Some detail -> Format.asprintf "%s: %s" symbol.name detail
+              | None -> symbol.name
+              in
+              let hover_content = `MarkupContent (Lsp.Types.MarkupContent.create
+                ~kind:Lsp.Types.MarkupKind.Markdown
+                ~value:(Format.asprintf "```jasmin\n%s\n```" content))
+              in
+              let hover = Lsp.Types.Hover.create
+                ~contents:hover_content
+                ~range:(Some (Document.SymbolTable.range_to_lsp_range (TreeSitter.TreeSitter.node_range node)))
+                ()
+              in
+              Ok (Some hover), [])
+  | _ -> Error "Document not open or not parsed", []
+
+(** Handle document symbol request *)
+let receive_text_document_document_symbol_request (params : Lsp.Types.DocumentSymbolParams.t) =
+  let uri = params.textDocument in
+  
+  match Document.DocumentStore.get_tree (!server_state).document_store uri,
+        Document.DocumentStore.get_text (!server_state).document_store uri with
+  | Some tree, Some source ->
+      let symbols = Document.SymbolTable.extract_symbols uri source tree in
+      let document_symbols = List.map Document.SymbolTable.symbol_to_document_symbol symbols in
+      Ok (`DocumentSymbol document_symbols), []
+  | _ -> Error "Document not open or not parsed", []
+
+(** Handle workspace symbol request *)
+let receive_workspace_symbol_request (params : Lsp.Types.WorkspaceSymbolParams.t) =
+  let query = params.query in
+  let all_uris = Document.DocumentStore.get_all_uris (!server_state).document_store in
+  
+  let all_symbols = List.concat_map (fun uri ->
+    match Document.DocumentStore.get_tree (!server_state).document_store uri,
+          Document.DocumentStore.get_text (!server_state).document_store uri with
+    | Some tree, Some source ->
+        Document.SymbolTable.extract_symbols uri source tree
+    | _ -> []
+  ) all_uris in
+  
+  (* Filter symbols by query *)
+  let filtered_symbols = 
+    if query = "" then all_symbols
+    else List.filter (fun sym ->
+      let name_lower = String.lowercase_ascii sym.Document.SymbolTable.name in
+      let query_lower = String.lowercase_ascii query in
+      try
+        let _ = Str.search_forward (Str.regexp_string query_lower) name_lower 0 in
+        true
+      with Not_found -> false
+    ) all_symbols
+  in
+  
+  let symbol_infos = List.map Document.SymbolTable.symbol_to_lsp filtered_symbols in
+  Ok symbol_infos, []
+
+(** Handle rename request *)
+let receive_text_document_rename_request (params : Lsp.Types.RenameParams.t) =
+  let uri = params.textDocument.uri in
+  let position = params.position in
+  let new_name = params.newName in
+  let point = { TreeSitter.TreeSitter.row = position.line; column = position.character } in
+  
+  match Document.DocumentStore.get_tree (!server_state).document_store uri,
+        Document.DocumentStore.get_text (!server_state).document_store uri with
+  | Some tree, Some source ->
+      let root = TreeSitter.TreeSitter.tree_root_node tree in
+      
+      (* Find the symbol at cursor *)
+      (match TreeSitter.TreeSitter.node_at_point root point with
+      | None -> Error "No symbol at position", []
+      | Some node ->
+          let symbol_name = TreeSitter.TreeSitter.node_text node source in
+          
+          (* Find all references to this symbol *)
+          let references = Document.SymbolTable.extract_references uri source tree in
+          let matching_refs = Document.SymbolTable.find_references_to references symbol_name in
+          
+          (* Create text edits for each reference *)
+          let edits = List.map (fun ref ->
+            Lsp.Types.TextEdit.create
+              ~range:(Document.SymbolTable.range_to_lsp_range ref.Document.SymbolTable.range)
+              ~newText:new_name
+          ) matching_refs in
+          
+          (* Create workspace edit *)
+          let changes = [(uri, edits)] in
+          let workspace_edit = Lsp.Types.WorkspaceEdit.create
+            ~changes:(Some changes)
+            ()
+          in
+          
+          Ok workspace_edit, [])
+  | _ -> Error "Document not open or not parsed", []
+
+(** Handle formatting request *)
+let receive_text_document_formatting_request (params : Lsp.Types.DocumentFormattingParams.t) =
+  (* Formatting is not implemented yet *)
+  Error "Formatting not implemented", []
+
+(** Handle document symbols request *)
+let receive_text_document_code_action_request (params : Lsp.Types.CodeActionParams.t) =
+  (* Code actions not implemented yet *)
+  Ok (Some []), []
+
+let receive_lsp_request_inner : type a. Jsonrpc.Id.t -> a Lsp.Client_request.t -> ('info,'asm) Jasmin.Prog.prog option -> (a,string) result * (Priority.t * RpcProtocolEvent.t) list =
+  fun _ req prog ->
+    match req with
+    | Lsp.Client_request.Initialize params -> receive_initialize_request params
+    | Lsp.Client_request.TextDocumentDefinition params -> receive_text_document_definition_request params prog
+    | Lsp.Client_request.TextDocumentReferences params -> receive_text_document_references_request params
+    | Lsp.Client_request.TextDocumentHover params -> receive_text_document_hover_request params
+    | Lsp.Client_request.TextDocumentDocumentSymbol params -> receive_text_document_document_symbol_request params
+    | Lsp.Client_request.WorkspaceSymbol params -> receive_workspace_symbol_request params
+    | Lsp.Client_request.TextDocumentRename params -> receive_text_document_rename_request params
+    | Lsp.Client_request.TextDocumentFormatting params -> receive_text_document_formatting_request params
+    | Lsp.Client_request.TextDocumentCodeAction params -> receive_text_document_code_action_request params
+    | _ -> Io.Logger.log ("Unsupported request\n") ; Error "Unsupported request", []
+
+let receive_lsp_request id req prog =
+  match req with
+  | Lsp.Client_request.E req ->
+    let response, events = receive_lsp_request_inner id req prog in
+    match response with
+    | Ok ok_response ->
+        let result_json = Lsp.Client_request.yojson_of_result req ok_response in
+        let response_json = RpcProtocolEvent.build_rpc_response id result_json in
+        (Priority.Next,Send (response_json)):: events
+  | _ -> []
+
+let receive_lsp_notification (notif : Lsp.Client_notification.t) =
+  match notif with
+  | Lsp.Client_notification.Initialized ->
+    Io.Logger.log "Server initialized\n";
+    []
+  | Lsp.Client_notification.TextDocumentDidOpen params ->
+      let uri = params.textDocument.uri in
+      let text = params.textDocument.text in
+      let version = params.textDocument.version in
+      Document.DocumentStore.open_document (!server_state).document_store uri text version;
+      (* Send diagnostics after opening *)
+      let diagnostics_event = send_diagnostics uri in
+      diagnostics_event
+  | Lsp.Client_notification.TextDocumentDidChange params ->
+      let uri = params.textDocument.uri in
+      let version = params.textDocument.version in
+      (match params.contentChanges with
+      | [] -> []
+      | changes ->
+          (* For full document sync, take the last change *)
+          let last_change = List.hd (List.rev changes) in
+          (match last_change with
+          | `TextDocumentContentChangeEvent change ->
+              Document.DocumentStore.update_document (!server_state).document_store uri change.text version;
+              (* Send diagnostics after change *)
+              send_diagnostics uri
+          | _ -> []))
+  | Lsp.Client_notification.TextDocumentDidClose params ->
+      let uri = params.textDocument.uri in
+      Document.DocumentStore.close_document (!server_state).document_store uri;
+      []
+  | _ -> []
+
+(** Send diagnostics for a document *)
+and send_diagnostics uri =
+  match Document.DocumentStore.get_tree (!server_state).document_store uri with
+  | None -> []
+  | Some tree ->
+      let diagnostics = collect_diagnostics tree (Document.DocumentStore.get_text (!server_state).document_store uri |> Option.value ~default:"") in
+      let params = Lsp.Types.PublishDiagnosticsParams.create ~uri ~diagnostics ~version:None in
+      let notification = Lsp.Server_notification.PublishDiagnostics params in
+      let json = Lsp.Server_notification.to_jsonrpc notification in
+      let packet_json = Jsonrpc.Notification.yojson_of_t json in
+      [(Priority.High, Send packet_json)]
+
+(** Collect diagnostics from syntax tree *)
+and collect_diagnostics tree source =
+  let root = TreeSitter.TreeSitter.tree_root_node tree in
+  let errors = ref [] in
+  
+  let rec visit_node node =
+    if TreeSitter.TreeSitter.node_has_error node then begin
+      if TreeSitter.TreeSitter.node_is_error node || TreeSitter.TreeSitter.node_is_missing node then begin
+        let range = TreeSitter.TreeSitter.node_range node in
+        let lsp_range = Document.SymbolTable.range_to_lsp_range range in
+        let message = 
+          if TreeSitter.TreeSitter.node_is_missing node then
+            Format.asprintf "Missing: %s" (TreeSitter.TreeSitter.node_type node)
+          else
+            "Syntax error"
+        in
+        let diagnostic = Lsp.Types.Diagnostic.create 
+          ~range:lsp_range 
+          ~message
+          ~severity:Lsp.Types.DiagnosticSeverity.Error
+          ()
+        in
+        errors := diagnostic :: !errors
+      end;
+      
+      (* Visit children *)
+      let children = TreeSitter.TreeSitter.node_named_children node in
+      List.iter visit_node children
+    end
+  in
+  
+  visit_node root;
+  List.rev !errors
+
+
+(*
+
+let send_lsp_packet (request : Lsp.Types.Packet) : protocol_event =
+  match request with
+  | Lsp.Types.Request.Request req ->
+      let packet = Jsonrpc.Packet.t_of_request req in
+      Send packet
+  | _ -> Receive None *)

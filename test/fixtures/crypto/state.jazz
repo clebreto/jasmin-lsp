@@ -1,0 +1,11 @@
+// Shared state buffers
+// Global arrays used across multiple encryption functions
+
+u32[16] chacha_state = {
+  0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0
+};
+
+u64[4] counter_state = {0, 0, 0, 0};

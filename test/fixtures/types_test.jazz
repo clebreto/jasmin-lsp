@@ -1,0 +1,35 @@
+// Test file for type information and hover
+
+fn process_u8(reg u8 byte_val) -> reg u8 {
+  reg u8 result;
+  result = byte_val + #1;
+  return result;
+}
+
+fn process_u16(reg u16 word_val) -> reg u16 {
+  reg u16 result;
+  result = word_val * #2;
+  return result;
+}
+
+fn process_u32(reg u32 dword_val) -> reg u32 {
+  reg u32 result;
+  result = dword_val - #10;
+  return result;
+}
+
+fn process_u64(reg u64 qword_val) -> reg u64 {
+  reg u64 result;
+  result = qword_val & #0xFF;
+  return result;
+}
+
+fn multi_return(reg u64 a, reg u64 b) -> reg u64, reg u64 {
+  reg u64 sum;
+  reg u64 diff;
+  
+  sum = a + b;
+  diff = a - b;
+  
+  return sum, diff;
+}

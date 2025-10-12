@@ -1,0 +1,11 @@
+// Top file - requires middle (which requires base)
+require "middle.jinc"
+
+export fn top_function(reg u64 z) -> reg u64 {
+  reg u64 result;
+  // This should find BASE_CONSTANT even though it's defined in base.jinc
+  // which is not directly required by this file
+  result = middle_function(z);
+  result = result + BASE_CONSTANT;
+  return result;
+}

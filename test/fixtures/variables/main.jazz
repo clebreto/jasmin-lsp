@@ -1,0 +1,15 @@
+// main.jazz - uses globals from globals.jazz
+require "globals.jazz"
+
+fn use_globals() -> reg u64 {
+  reg u64 result;
+  reg u64 size;
+  
+  // Reference to parameter from globals.jazz
+  size = BUFFER_SIZE;
+  
+  // Reference to global array from globals.jazz
+  result = shared_data[0];
+  
+  return result;
+}

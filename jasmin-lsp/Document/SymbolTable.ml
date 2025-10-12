@@ -643,6 +643,88 @@ let find_definition symbols name =
               (* Finally, return any matching symbol *)
               List.nth_opt syms 0
 
+(** Find definition by name, scoped to the function containing the given position *)
+let find_definition_at_position symbols name position =
+  Io.Logger.log (Format.asprintf "find_definition_at_position for '%s' at (%d,%d)" 
+    name position.row position.column);
+  
+  (* Find which function contains the requested position *)
+  let containing_function = 
+    List.find_opt (fun sym ->
+      sym.kind = Function &&
+      let start_point = sym.range.start_point in
+      let end_point = sym.range.end_point in
+      (position.row > start_point.row || 
+       (position.row = start_point.row && position.column >= start_point.column)) &&
+      (position.row < end_point.row || 
+       (position.row = end_point.row && position.column <= end_point.column))
+    ) symbols
+  in
+  
+  (match containing_function with
+  | Some func -> 
+      Io.Logger.log (Format.asprintf "Position is within function: %s" func.name)
+  | None -> 
+      Io.Logger.log "Position is not within any function");
+  
+  (* Filter symbols matching the name *)
+  let matching_symbols = List.filter (fun sym -> sym.name = name) symbols in
+  
+  Io.Logger.log (Format.asprintf "Found %d symbols with name '%s'" 
+    (List.length matching_symbols) name);
+  List.iter (fun sym ->
+    let kind_str = match sym.kind with
+      | Function -> "Function"
+      | Variable -> "Variable"
+      | Parameter -> "Parameter"
+      | Type -> "Type"
+      | Constant -> "Constant"
+    in
+    Io.Logger.log (Format.asprintf "  - %s %s at line %d" 
+      kind_str sym.name sym.definition_range.start_point.row)
+  ) matching_symbols;
+  
+  match matching_symbols with
+  | [] -> None
+  | syms ->
+      (* If we're inside a function, filter variables/parameters to only those in the same function *)
+      let scoped_syms = match containing_function with
+        | Some func when List.exists (fun s -> s.kind = Variable || s.kind = Parameter) syms ->
+            (* Filter to variables/parameters within the function's range *)
+            List.filter (fun sym ->
+              match sym.kind with
+              | Variable | Parameter ->
+                  let def_line = sym.definition_range.start_point.row in
+                  let func_start = func.range.start_point.row in
+                  let func_end = func.range.end_point.row in
+                  let in_scope = def_line >= func_start && def_line <= func_end in
+                  Io.Logger.log (Format.asprintf "  Checking if %s '%s' (line %d) is in function '%s' (lines %d-%d): %b"
+                    (if sym.kind = Variable then "variable" else "parameter")
+                    sym.name def_line func.name func_start func_end in_scope);
+                  in_scope
+              | _ -> true (* Keep non-variable symbols *)
+            ) syms
+        | _ -> syms
+      in
+      
+      Io.Logger.log (Format.asprintf "After scope filtering: %d candidates" 
+        (List.length scoped_syms));
+      
+      (* Prioritize: parameters > variables > other symbols *)
+      match List.find_opt (fun sym -> sym.kind = Parameter) scoped_syms with
+      | Some param -> 
+          Io.Logger.log (Format.asprintf "Returning parameter '%s' at line %d" 
+            param.name param.definition_range.start_point.row);
+          Some param
+      | None ->
+          match List.find_opt (fun sym -> sym.kind = Variable) scoped_syms with
+          | Some var -> 
+              Io.Logger.log (Format.asprintf "Returning variable '%s' at line %d" 
+                var.name var.definition_range.start_point.row);
+              Some var
+          | None ->
+              List.nth_opt scoped_syms 0
+
 (** Convert to LSP SymbolInformation *)
 let symbol_to_lsp symbol =
   Lsp.Types.SymbolInformation.create

@@ -10,9 +10,11 @@ All tree-sitter integration issues have been resolved! The language server is pr
 
 ✅ **Tree-Sitter Parsing** - Fast, incremental syntax analysis  
 ✅ **Syntax Diagnostics** - Real-time error detection  
-✅ **Go to Definition** - Navigate to function and variable definitions  
+✅ **Go to Definition** - Navigate to function, variable, parameter, and global definitions  
+✅ **Cross-File Navigation** - Jump to definitions across `require`d files  
+✅ **Master File Support** - Proper symbol resolution using compilation entry point  
 ✅ **Find All References** - Locate all usages of a symbol  
-✅ **Hover Information** - Show type information and signatures  
+✅ **Hover Information** - Show type information, signatures, and keyword documentation  
 ✅ **Document Symbols** - Outline view of current file  
 ✅ **Workspace Symbols** - Global symbol search  
 ✅ **Rename Symbol** - Refactoring support
@@ -83,9 +85,12 @@ _build/default/jasmin-lsp/jasmin_lsp.exe
 2. Configure the LSP server path in settings:
    ```json
    {
-     "jasmin.lsp.path": "/path/to/jasmin-lsp/_build/default/jasmin-lsp/jasmin_lsp.exe"
+     "jasmin.path": "/path/to/jasmin-lsp/_build/default/jasmin-lsp/jasmin_lsp.exe",
+     "jasmin.masterFile": "main.jazz"
    }
    ```
+
+**Note**: The `jasmin.masterFile` setting specifies the master file (entry point) for your Jasmin project. This is important for proper symbol resolution across `require`d files. A status bar item will show the current master file when editing `.jazz` or `.jinc` files, and you can click it to change the master file. See [MASTER_FILE_FEATURE.md](MASTER_FILE_FEATURE.md) for details.
 
 ### Other IDEs
 
