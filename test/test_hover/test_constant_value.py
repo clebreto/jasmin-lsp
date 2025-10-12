@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 
 def send_message(proc, msg):
     """Send a JSON-RPC message to the LSP server."""
@@ -44,9 +45,8 @@ def read_until_response(proc, request_id):
 def test_constant_hover():
     """Test hovering over a constant to see its value."""
     
-    # Start LSP server
-    lsp_path = os.path.join(os.path.dirname(__file__), 
-                            "_build/default/jasmin-lsp/jasmin_lsp.exe")
+    # Start LSP server - get path relative to project root
+    lsp_path = Path(__file__).parent.parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
     
     proc = subprocess.Popen(
         [lsp_path],
@@ -81,8 +81,8 @@ def test_constant_hover():
         time.sleep(0.2)
         
         # Open a test file with a param constant
-        test_file_path = os.path.join(os.path.dirname(__file__), 
-                                     "test/fixtures/transitive/base.jinc")
+        # Fixtures are in test/fixtures, we're in test/test_hover
+        test_file_path = Path(__file__).parent.parent / "fixtures/transitive/base.jinc"
         with open(test_file_path, 'r') as f:
             content = f.read()
         

@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-LSP_SERVER = Path(__file__).parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
+LSP_SERVER = Path(__file__).parent.parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
 
 TEST_CONTENT = """fn process_u8(reg u8 byte_val) -> reg u8 {
   reg u8 result;

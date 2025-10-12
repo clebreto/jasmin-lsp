@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Demo: Hover shows variable types"""
+"""Demo hover functionality with detailed type information."""
 
-import subprocess
-import json
+import subprocess, json, sys
 from pathlib import Path
 
-LSP_SERVER = Path(__file__).parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
+LSP_SERVER = Path(__file__).parent.parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
 
 # Real-world Jasmin code
 CODE = """fn crypto_operation(reg u64 key, reg u32 rounds) -> reg u64 {

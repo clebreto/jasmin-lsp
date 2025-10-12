@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Test hover with complex types (arrays, pointers, etc.)"""
+"""Test hover for complex types"""
 
 import subprocess
 import json
 import sys
 from pathlib import Path
 
-LSP_SERVER = Path(__file__).parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
+LSP_SERVER = Path(__file__).parent.parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
 
 # Test with complex types
 TEST_CODE = """fn process_arrays(reg ptr u32[2] data, stack u64[8] buffer) -> reg u64 {

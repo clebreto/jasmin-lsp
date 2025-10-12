@@ -5,6 +5,7 @@ import subprocess
 import json
 import os
 import time
+from pathlib import Path
 
 def send_message(proc, msg):
     """Send a JSON-RPC message to the LSP server."""
@@ -38,8 +39,8 @@ def read_until_response(proc, request_id):
 def test_constant_types():
     """Test hovering over various constant types."""
     
-    lsp_path = os.path.join(os.path.dirname(__file__), 
-                            "_build/default/jasmin-lsp/jasmin_lsp.exe")
+    # Get path to LSP server relative to project root
+    lsp_path = Path(__file__).parent.parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
     
     proc = subprocess.Popen(
         [lsp_path],

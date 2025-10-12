@@ -1,0 +1,5 @@
+// Test constants for hover testing
+param int SIMPLE = 42;
+param int EXPRESSION = (1 << 19) - 1;
+param int HEX_VALUE = 0x1000;
+param int LARGE = 18446744073709551615;

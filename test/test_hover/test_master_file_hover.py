@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 """
-Test cross-file hover with master file support using existing test fixtures.
-
-This test verifies that:
-1. Master file can be set via jasmin/setMasterFile notification
-2. Hover on variables/functions defined in required files works
-3. Complete dependency tree is built from master file
+Test master file hover functionality.
+Verifies that cross-file symbol resolution works correctly when using a master file.
 """
 
 import json
 import subprocess
 import os
-import sys
+import tempfile
+import time
 from pathlib import Path
 
-# Path to the LSP server executable
-LSP_SERVER = "_build/default/jasmin-lsp/jasmin_lsp.exe"
+# Server path - use absolute path from project root
+LSP_SERVER = Path(__file__).parent.parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
 
 def send_request(proc, request):
     """Send a request to the LSP server."""

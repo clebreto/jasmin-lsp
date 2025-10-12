@@ -1,0 +1,12 @@
+// Utility functions
+require "types.jinc";
+
+fn process(reg u64 value) -> reg u64 {
+    reg u64 temp;
+    reg u64 output;
+    
+    temp = add_one(value);
+    output = multiply(temp, SIZE);
+    
+    return output;
+}

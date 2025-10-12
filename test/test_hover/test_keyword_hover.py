@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Test hover functionality on keywords vs symbols
+Test hover functionality on Jasmin keywords.
 """
 
-import subprocess
-import json
-import sys
-import os
+import json, subprocess, tempfile, os
+from pathlib import Path
 
-LSP_SERVER = "_build/default/jasmin-lsp/jasmin_lsp.exe"
+# Server path - use absolute path from project root
+LSP_SERVER = Path(__file__).parent.parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
 
 # Test fixture
 TEST_FILE_CONTENT = """// Test file for hover
