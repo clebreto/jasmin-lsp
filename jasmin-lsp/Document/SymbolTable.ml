@@ -36,6 +36,26 @@ let rec extract_requires_from_node uri source node acc =
   
   let acc = match node_type with
   | "require" ->
+      (* Check if there's a 'from' clause with a namespace *)
+      let namespace_opt = 
+        let child_count = TreeSitter.node_named_child_count node in
+        let rec find_from i =
+          if i >= child_count then None
+          else
+            match TreeSitter.node_named_child node i with
+            | None -> find_from (i + 1)
+            | Some child ->
+                if TreeSitter.node_type child = "from" then
+                  (* Extract the namespace identifier from the 'from' node *)
+                  match TreeSitter.node_child_by_field_name child "id" with
+                  | Some id_node -> Some (TreeSitter.node_text id_node source)
+                  | None -> find_from (i + 1)
+                else
+                  find_from (i + 1)
+        in
+        find_from 0
+      in
+      
       (* Find string_literal children which contain the filenames *)
       let child_count = TreeSitter.node_named_child_count node in
       let rec process_children i acc =
@@ -47,35 +67,71 @@ let rec extract_requires_from_node uri source node acc =
               let child_type = TreeSitter.node_type child in
               if child_type = "string_literal" then
                 (* Extract the filename from string_literal -> string_content *)
-                (match TreeSitter.node_child_by_field_name child "content" with
-                | Some content_node ->
-                    let filename = TreeSitter.node_text content_node source in
-                    (* Resolve relative to current file *)
-                    let current_path = Lsp.Uri.to_path uri in
-                    let current_dir = Filename.dirname current_path in
-                    let resolved_path = Filename.concat current_dir filename in
-                    if Sys.file_exists resolved_path then
-                      (Lsp.Uri.of_path resolved_path) :: acc
-                    else
-                      acc
-                | None -> 
-                    (* Fallback: try to get text directly *)
-                    let filename = TreeSitter.node_text child source in
-                    (* Remove quotes if present *)
-                    let filename = 
+                let filename_opt = match TreeSitter.node_child_by_field_name child "content" with
+                  | Some content_node -> Some (TreeSitter.node_text content_node source)
+                  | None -> 
+                      (* Fallback: try to get text directly *)
+                      let filename = TreeSitter.node_text child source in
+                      (* Remove quotes if present *)
                       if String.length filename >= 2 && 
                          String.get filename 0 = '"' && 
                          String.get filename (String.length filename - 1) = '"' 
-                      then String.sub filename 1 (String.length filename - 2)
-                      else filename
-                    in
+                      then Some (String.sub filename 1 (String.length filename - 2))
+                      else Some filename
+                in
+                
+                (match filename_opt with
+                | Some filename ->
                     let current_path = Lsp.Uri.to_path uri in
                     let current_dir = Filename.dirname current_path in
-                    let resolved_path = Filename.concat current_dir filename in
-                    if Sys.file_exists resolved_path then
-                      (Lsp.Uri.of_path resolved_path) :: acc
-                    else
-                      acc)
+                    
+                    (* If there's a namespace, we need to search for it *)
+                    let resolved_path = match namespace_opt with
+                      | Some ns ->
+                          (* Search for namespace directory in current dir and parent dirs *)
+                          (* Try lowercase version of namespace (e.g., "Common" -> "common") *)
+                          let ns_lower = String.lowercase_ascii ns in
+                          
+                          (* Try: current_dir/namespace/filename *)
+                          let try1 = Filename.concat (Filename.concat current_dir ns) filename in
+                          let try2 = Filename.concat (Filename.concat current_dir ns_lower) filename in
+                          
+                          (* Try: parent_dir/namespace/filename (for sibling directories) *)
+                          let parent_dir = Filename.dirname current_dir in
+                          let try3 = Filename.concat (Filename.concat parent_dir ns) filename in
+                          let try4 = Filename.concat (Filename.concat parent_dir ns_lower) filename in
+                          
+                          (* Try: grandparent_dir/namespace/filename *)
+                          let grandparent_dir = Filename.dirname parent_dir in
+                          let try5 = Filename.concat (Filename.concat grandparent_dir ns) filename in
+                          let try6 = Filename.concat (Filename.concat grandparent_dir ns_lower) filename in
+                          
+                          Io.Logger.log (Format.asprintf "Resolving: from %s require \"%s\"" ns filename);
+                          Io.Logger.log (Format.asprintf "  Current dir: %s" current_dir);
+                          Io.Logger.log (Format.asprintf "  Trying: %s -> %s" "current/ns" (if Sys.file_exists try1 then "FOUND" else "not found"));
+                          Io.Logger.log (Format.asprintf "  Trying: %s -> %s" "current/ns_lower" (if Sys.file_exists try2 then "FOUND" else "not found"));
+                          Io.Logger.log (Format.asprintf "  Trying: %s -> %s" "parent/ns" (if Sys.file_exists try3 then "FOUND" else "not found"));
+                          Io.Logger.log (Format.asprintf "  Trying: %s -> %s" "parent/ns_lower" (if Sys.file_exists try4 then "FOUND" else "not found"));
+                          
+                          (* Return first existing path *)
+                          if Sys.file_exists try1 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try1); Some try1)
+                          else if Sys.file_exists try2 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try2); Some try2)
+                          else if Sys.file_exists try3 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try3); Some try3)
+                          else if Sys.file_exists try4 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try4); Some try4)
+                          else if Sys.file_exists try5 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try5); Some try5)
+                          else if Sys.file_exists try6 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try6); Some try6)
+                          else (Io.Logger.log "  NOT FOUND in any location"; None)
+                      | None ->
+                          (* No namespace, resolve relative to current dir *)
+                          let path = Filename.concat current_dir filename in
+                          if Sys.file_exists path then Some path
+                          else None
+                    in
+                    
+                    (match resolved_path with
+                    | Some path -> (Lsp.Uri.of_path path) :: acc
+                    | None -> acc)
+                | None -> acc)
               else
                 process_children (i + 1) acc
       in
@@ -160,39 +216,49 @@ let extract_function_info node source =
 
 (** Extract variable declaration info *)
 let extract_variable_info node source =
-  (* Strategy: Get text from start of var_decl to start of variable node
-     This captures the complete type: "reg ptr u32[2]", "stack u64[8]", etc. *)
-  let get_type_before_variable var_node =
-    let node_range = TreeSitter.node_range node in
-    let var_range = TreeSitter.node_range var_node in
-    (* Extract text from start of declaration to start of variable *)
-    let start_byte = node_range.TreeSitter.start_byte in
-    let end_byte = var_range.TreeSitter.start_byte in
-    if end_byte > start_byte then
-      let type_text = String.sub source start_byte (end_byte - start_byte) in
-      let trimmed = String.trim type_text in
-      if String.length trimmed > 0 then Some trimmed else None
-    else
-      None
-  in
+  (* Strategy: Get text from start of var_decl to start of FIRST variable node
+     This captures the complete type: "reg ptr u32[2]", "stack u64[8]", etc.
+     For declarations like "reg u32 i, j;", all variables share the same type. *)
   
-  (* Get all variable names with their types *)
+  (* First, find all variable nodes *)
   let child_count = TreeSitter.node_child_count node in
-  let rec collect_vars i acc =
-    if i >= child_count then acc
+  let rec find_variables i acc =
+    if i >= child_count then List.rev acc
     else
       match TreeSitter.node_child node i with
-      | None -> collect_vars (i + 1) acc
+      | None -> find_variables (i + 1) acc
       | Some child ->
           let node_type = TreeSitter.node_type child in
           if node_type = "variable" then
-            let name = TreeSitter.node_text child source in
-            let type_str = get_type_before_variable child in
-            collect_vars (i + 1) ((name, type_str) :: acc)
+            find_variables (i + 1) (child :: acc)
           else
-            collect_vars (i + 1) acc
+            find_variables (i + 1) acc
   in
-  collect_vars 0 []
+  
+  let variables = find_variables 0 [] in
+  
+  (* Extract type from start of declaration to first variable *)
+  let type_str = match variables with
+    | [] -> None
+    | first_var :: _ ->
+        let node_range = TreeSitter.node_range node in
+        let var_range = TreeSitter.node_range first_var in
+        let start_byte = node_range.TreeSitter.start_byte in
+        let end_byte = var_range.TreeSitter.start_byte in
+        if end_byte > start_byte then
+          let type_text = String.sub source start_byte (end_byte - start_byte) in
+          let trimmed = String.trim type_text in
+          if String.length trimmed > 0 then Some trimmed else None
+        else
+          None
+  in
+  
+  (* Return all variables with the same type AND their individual ranges *)
+  List.map (fun var_node ->
+    let name = TreeSitter.node_text var_node source in
+    let var_range = TreeSitter.node_range var_node in
+    (name, type_str, var_range)
+  ) variables
 
 (** Extract parameter info *)
 let extract_parameter_info node source =
@@ -212,38 +278,48 @@ let extract_parameter_info node source =
 
 (** Extract parameter info from param_decl node - similar to var_decl *)
 let extract_param_decl_info node source =
-  (* Get type text from start of param_decl to start of parameter node *)
-  let get_type_before_parameter param_node =
-    let node_range = TreeSitter.node_range node in
-    let param_range = TreeSitter.node_range param_node in
-    (* Extract text from start of declaration to start of parameter *)
-    let start_byte = node_range.TreeSitter.start_byte in
-    let end_byte = param_range.TreeSitter.start_byte in
-    if end_byte > start_byte then
-      let type_text = String.sub source start_byte (end_byte - start_byte) in
-      let trimmed = String.trim type_text in
-      if String.length trimmed > 0 then Some trimmed else None
-    else
-      None
-  in
+  (* Strategy: Get text from start of param_decl to start of FIRST parameter node
+     For declarations like "reg u32 x, y", all parameters share the same type. *)
   
-  (* Get all parameter names with their types *)
+  (* First, find all parameter nodes *)
   let child_count = TreeSitter.node_child_count node in
-  let rec collect_params i acc =
-    if i >= child_count then acc
+  let rec find_parameters i acc =
+    if i >= child_count then List.rev acc
     else
       match TreeSitter.node_child node i with
-      | None -> collect_params (i + 1) acc
+      | None -> find_parameters (i + 1) acc
       | Some child ->
           let node_type = TreeSitter.node_type child in
           if node_type = "parameter" then
-            let name = TreeSitter.node_text child source in
-            let type_str = get_type_before_parameter child in
-            collect_params (i + 1) ((name, type_str) :: acc)
+            find_parameters (i + 1) (child :: acc)
           else
-            collect_params (i + 1) acc
+            find_parameters (i + 1) acc
   in
-  collect_params 0 []
+  
+  let parameters = find_parameters 0 [] in
+  
+  (* Extract type from start of declaration to first parameter *)
+  let type_str = match parameters with
+    | [] -> None
+    | first_param :: _ ->
+        let node_range = TreeSitter.node_range node in
+        let param_range = TreeSitter.node_range first_param in
+        let start_byte = node_range.TreeSitter.start_byte in
+        let end_byte = param_range.TreeSitter.start_byte in
+        if end_byte > start_byte then
+          let type_text = String.sub source start_byte (end_byte - start_byte) in
+          let trimmed = String.trim type_text in
+          if String.length trimmed > 0 then Some trimmed else None
+        else
+          None
+  in
+  
+  (* Return all parameters with the same type AND their individual ranges *)
+  List.map (fun param_node ->
+    let name = TreeSitter.node_text param_node source in
+    let param_range = TreeSitter.node_range param_node in
+    (name, type_str, param_range)
+  ) parameters
 
 (** Recursively extract symbols from a node *)
 let rec extract_symbols_from_node uri source node acc =
@@ -267,12 +343,12 @@ let rec extract_symbols_from_node uri source node acc =
       
   | "variable_declaration" | "reg_declaration" | "stack_declaration" | "var_decl" ->
       let var_infos = extract_variable_info node source in
-      List.fold_left (fun acc (name, detail) ->
+      List.fold_left (fun acc (name, detail, var_range) ->
         {
           name;
           kind = Variable;
-          range;
-          definition_range = range;
+          range = var_range;
+          definition_range = var_range;
           uri;
           detail;
         } :: acc
@@ -293,12 +369,12 @@ let rec extract_symbols_from_node uri source node acc =
       
   | "param_decl" ->
       let param_infos = extract_param_decl_info node source in
-      List.fold_left (fun acc (name, detail) ->
+      List.fold_left (fun acc (name, detail, param_range) ->
         {
           name;
           kind = Parameter;
-          range;
-          definition_range = range;
+          range = param_range;
+          definition_range = param_range;
           uri;
           detail;
         } :: acc
@@ -310,9 +386,18 @@ let rec extract_symbols_from_node uri source node acc =
       | Some name_node ->
           let name = TreeSitter.node_text name_node source in
           let detail = 
-            match TreeSitter.node_child_by_field_name node "type" with
-            | Some type_node -> Some (TreeSitter.node_text type_node source)
-            | None -> Some "param"
+            match TreeSitter.node_child_by_field_name node "type",
+                  TreeSitter.node_child_by_field_name node "value" with
+            | Some type_node, Some value_node ->
+                let type_text = TreeSitter.node_text type_node source in
+                let value_text = TreeSitter.node_text value_node source in
+                Some (Format.asprintf "%s = %s" type_text value_text)
+            | Some type_node, None ->
+                Some (TreeSitter.node_text type_node source)
+            | None, Some value_node ->
+                let value_text = TreeSitter.node_text value_node source in
+                Some (Format.asprintf "= %s" value_text)
+            | None, None -> Some "param"
           in
           {
             name;
@@ -377,6 +462,119 @@ let rec extract_symbols_from_node uri source node acc =
 let extract_symbols uri source tree =
   let root = TreeSitter.tree_root_node tree in
   extract_symbols_from_node uri source root [] |> List.rev
+
+(** Build environment of constant values from source map 
+    Returns a list of (name, value) pairs for successfully evaluated constants
+    Uses multiple passes to resolve constants that depend on other constants *)
+let build_const_env source_map =
+  (* Collect all param nodes from all files *)
+  let all_params = Hashtbl.fold (fun uri (source, tree) acc ->
+    let root = TreeSitter.tree_root_node tree in
+    let rec find_params node acc =
+      let node_type = TreeSitter.node_type node in
+      let acc = 
+        if node_type = "param" then
+          match TreeSitter.node_child_by_field_name node "name",
+                TreeSitter.node_child_by_field_name node "value" with
+          | Some name_node, Some value_node ->
+              let name = TreeSitter.node_text name_node source in
+              (name, value_node, source) :: acc
+          | _ -> acc
+        else acc
+      in
+      (* Recursively process children *)
+      let child_count = TreeSitter.node_named_child_count node in
+      let rec process_children i acc =
+        if i >= child_count then acc
+        else
+          match TreeSitter.node_named_child node i with
+          | None -> process_children (i + 1) acc
+          | Some child -> process_children (i + 1) (find_params child acc)
+      in
+      process_children 0 acc
+    in
+    find_params root acc
+  ) source_map [] in
+  
+  (* Evaluate constants in multiple passes until no more can be evaluated *)
+  let rec evaluate_passes env remaining max_passes =
+    if max_passes = 0 || remaining = [] then
+      env
+    else
+      let newly_evaluated, still_remaining = List.partition_map (fun (name, value_node, source) ->
+        match ExprEvaluator.evaluate_with_env env value_node source with
+        | ExprEvaluator.Value v -> Either.Left (name, v)
+        | ExprEvaluator.Error _ -> Either.Right (name, value_node, source)
+      ) remaining in
+      
+      if newly_evaluated = [] then
+        (* No progress made, stop *)
+        env
+      else
+        (* Add newly evaluated constants to environment and continue *)
+        let new_env = List.rev_append newly_evaluated env in
+        evaluate_passes new_env still_remaining (max_passes - 1)
+  in
+  
+  let final_env = evaluate_passes [] all_params 10 in  (* Max 10 passes *)
+  final_env
+
+(** Enhance constant symbols with computed values *)
+let enhance_constants_with_values symbols source_map =
+  (* Build environment of constant values *)
+  let env = build_const_env source_map in
+  
+  (* Update each constant symbol with computed value *)
+  List.map (fun sym ->
+    if sym.kind = Constant then
+      (* Find the param node for this symbol *)
+      match Hashtbl.find_opt source_map sym.uri with
+      | None -> sym
+      | Some (source, tree) ->
+          let rec find_param_node node =
+            let node_type = TreeSitter.node_type node in
+            if node_type = "param" then
+              match TreeSitter.node_child_by_field_name node "name" with
+              | Some name_node ->
+                  if TreeSitter.node_text name_node source = sym.name then
+                    Some node
+                  else None
+              | None -> None
+            else
+              let child_count = TreeSitter.node_named_child_count node in
+              let rec check_children i =
+                if i >= child_count then None
+                else
+                  match TreeSitter.node_named_child node i with
+                  | None -> check_children (i + 1)
+                  | Some child ->
+                      match find_param_node child with
+                      | Some n -> Some n
+                      | None -> check_children (i + 1)
+              in
+              check_children 0
+          in
+          
+          let root = TreeSitter.tree_root_node tree in
+          (match find_param_node root with
+          | None -> sym
+          | Some param_node ->
+              match TreeSitter.node_child_by_field_name param_node "value" with
+              | None -> sym
+              | Some value_node ->
+                  (* Try to evaluate the expression *)
+                  match ExprEvaluator.evaluate_with_env env value_node source with
+                  | ExprEvaluator.Value computed_value ->
+                      (* Update detail to include computed value *)
+                      let new_detail = match sym.detail with
+                        | Some detail_str -> Some (detail_str ^ " = " ^ string_of_int computed_value)
+                        | None -> Some ("= " ^ string_of_int computed_value)
+                      in
+                      { sym with detail = new_detail }
+                  | ExprEvaluator.Error _ -> sym)
+    else
+      sym
+  ) symbols
 
 (** Extract identifier references *)
 let rec extract_references_from_node uri source node acc =

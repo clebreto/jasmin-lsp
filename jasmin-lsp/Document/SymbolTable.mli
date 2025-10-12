@@ -28,6 +28,12 @@ type reference = {
 (** Extract all symbols from a syntax tree *)
 val extract_symbols : Lsp.Types.DocumentUri.t -> string -> TreeSitter.tree -> symbol list
 
+(** Enhance constant symbols with computed values 
+    @param symbols List of symbols to enhance
+    @param source_map Hashtable mapping URIs to (source, tree) pairs
+    @return Enhanced symbol list with computed constant values *)
+val enhance_constants_with_values : symbol list -> (Lsp.Types.DocumentUri.t, string * TreeSitter.tree) Hashtbl.t -> symbol list
+
 (** Extract required file URIs from a syntax tree *)
 val extract_required_files : Lsp.Types.DocumentUri.t -> string -> TreeSitter.tree -> Lsp.Types.DocumentUri.t list
 

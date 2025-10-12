@@ -155,12 +155,46 @@ let receive_rpc_request (req : Jsonrpc.Request.t) prog =
 
 let receive_rpc_notification (notif : Jsonrpc.Notification.t) =
   try
-    let lsp_notif = Lsp.Client_notification.of_jsonrpc notif in
-    match lsp_notif with
-    | Error err ->
-        Io.Logger.log (Format.asprintf "Failed to decode notification: %s\n" err);
-        []
-    | Ok notif -> LspProtocol.receive_lsp_notification notif
+    (* Check for custom jasmin-lsp notifications first *)
+    let method_name = notif.method_ in
+    
+    (* Handle custom jasmin/setMasterFile notification *)
+    if method_name = "jasmin/setMasterFile" then (
+      Io.Logger.log "Received jasmin/setMasterFile notification";
+      match notif.params with
+      | Some params ->
+          (try
+            (* Parse the URI from the params *)
+            let uri_str = match params with
+            | `Assoc fields ->
+                (match List.assoc_opt "uri" fields with
+                | Some (`String s) -> Some s
+                | _ -> None)
+            | _ -> None
+            in
+            match uri_str with
+            | Some uri_str ->
+                let uri = Lsp.Types.DocumentUri.of_string uri_str in
+                LspProtocol.receive_set_master_file_notification uri
+            | None ->
+                Io.Logger.log "Failed to extract URI from jasmin/setMasterFile params";
+                []
+          with e ->
+            Io.Logger.log (Format.asprintf "Error processing jasmin/setMasterFile: %s" 
+              (Printexc.to_string e));
+            [])
+      | None ->
+          Io.Logger.log "jasmin/setMasterFile notification missing params";
+          []
+    ) else (
+      (* Standard LSP notification *)
+      let lsp_notif = Lsp.Client_notification.of_jsonrpc notif in
+      match lsp_notif with
+      | Error err ->
+          Io.Logger.log (Format.asprintf "Failed to decode notification: %s\n" err);
+          []
+      | Ok notif -> LspProtocol.receive_lsp_notification notif
+    )
   with e ->
     Io.Logger.log (Format.asprintf "Exception in receive_rpc_notification: %s\n%s" 
       (Printexc.to_string e)
@@ -168,7 +202,50 @@ let receive_rpc_notification (notif : Jsonrpc.Notification.t) =
     []
 
 (*TODO : Check if this function should raise an error*)
-let receive_rpc_response (_ : Jsonrpc.Response.t) = []
+let receive_rpc_response (resp : Jsonrpc.Response.t) = 
+  try
+    (* Check if this is a response to our workspace/configuration request *)
+    match resp.id with
+    | `Int id when id = Config.conf_request_id ->
+        Io.Logger.log "Received workspace/configuration response";
+        (* Try to parse the configuration from the response *)
+        (try
+          let result_json = match resp with
+          | { result = Ok json; _ } -> Some json
+          | _ -> None
+          in
+          match result_json with
+          | Some result ->
+              (* The result is an array with one element (our single ConfigurationItem) *)
+              let config_array = Yojson.Safe.Util.to_list result in
+              (match config_array with
+              | [config_obj] ->
+                  (* Extract jasmin-root field if present *)
+                  (try
+                    let jasmin_root = Yojson.Safe.Util.member "jasmin-root" config_obj in
+                    let root_path = Yojson.Safe.Util.to_string jasmin_root in
+                    Io.Logger.log (Format.asprintf "Found jasmin-root in configuration: %s" root_path);
+                    (* Convert to URI and set as master file *)
+                    let uri = Lsp.Uri.of_path root_path in
+                    LspProtocol.receive_set_master_file_notification uri
+                  with _ ->
+                    Io.Logger.log "No jasmin-root found in configuration or failed to parse";
+                    [])
+              | _ ->
+                  Io.Logger.log "Unexpected configuration response format";
+                  [])
+          | None ->
+              Io.Logger.log "Configuration response has no result or is an error";
+              []
+        with e ->
+          Io.Logger.log (Format.asprintf "Failed to parse configuration response: %s" 
+            (Printexc.to_string e));
+          [])
+    | _ -> []
+  with e ->
+    Io.Logger.log (Format.asprintf "Exception in receive_rpc_response: %s" 
+      (Printexc.to_string e));
+    []
 
 let receive_rpc_batch_response (_ : Jsonrpc.Response.t list) = []
 

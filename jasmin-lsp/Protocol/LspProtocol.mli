@@ -3,3 +3,6 @@ val receive_lsp_request :
 
 val receive_lsp_notification :
   Lsp.Client_notification.t -> (Priority.t * RpcProtocolEvent.t) list
+
+val receive_set_master_file_notification :
+  Lsp.Types.DocumentUri.t -> (Priority.t * RpcProtocolEvent.t) list
