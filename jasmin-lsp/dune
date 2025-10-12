@@ -2,18 +2,18 @@
  (name jasmin_lsp)
  (public_name jasmin-lsp)
  (flags (:standard -w -27-32 -g
-   -cclib -L/Users/clebreto/dev/splits/jasmin-lsp/.pixi/envs/default/lib
-   -cclib -L/Users/clebreto/dev/splits/jasmin-lsp/tree-sitter-jasmin
+   -cclib -L%{env:PIXI_PROJECT_ROOT=.}/.pixi/envs/default/lib
+   -cclib -L%{project_root}/tree-sitter-jasmin
    -cclib -ltree-sitter
    -cclib -ltree-sitter-jasmin
-   -cclib -Wl,-rpath,/Users/clebreto/dev/splits/jasmin-lsp/.pixi/envs/default/lib
-   -cclib -Wl,-rpath,/Users/clebreto/dev/splits/jasmin-lsp/tree-sitter-jasmin))
+   -cclib -Wl,-rpath,%{env:PIXI_PROJECT_ROOT=.}/.pixi/envs/default/lib
+   -cclib -Wl,-rpath,%{project_root}/tree-sitter-jasmin))
  (foreign_stubs
   (language c)
   (names tree_sitter_stubs)
-  (flags -I/Users/clebreto/dev/splits/jasmin-lsp/.pixi/envs/default/include
-         -I/Users/clebreto/dev/splits/jasmin-lsp/tree-sitter-jasmin/src
-         -I/Users/clebreto/dev/splits/jasmin-lsp/tree-sitter-jasmin/bindings/c))
+  (flags -I%{env:PIXI_PROJECT_ROOT=.}/.pixi/envs/default/include
+         -I%{project_root}/tree-sitter-jasmin/src
+         -I%{project_root}/tree-sitter-jasmin/bindings/c))
  (libraries jasmin.jasmin lsp yojson lwt lwt.unix cmdliner batteries ppx_yojson_conv_lib)
  (preprocess
    (pps ppx_yojson_conv lwt_ppx)
