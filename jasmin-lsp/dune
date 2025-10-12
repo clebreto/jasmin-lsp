@@ -1,17 +1,25 @@
+(rule
+ (targets libtree-sitter-jasmin.a libtree-sitter-jasmin.dylib)
+ (deps (source_tree %{project_root}/tree-sitter-jasmin))
+ (action
+  (progn
+   (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.a libtree-sitter-jasmin.a)
+   (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.dylib libtree-sitter-jasmin.dylib))))
+
 (executable
  (name jasmin_lsp)
  (public_name jasmin-lsp)
  (flags (:standard -w -27-32 -g
-   -cclib -L%{env:PIXI_PROJECT_ROOT=.}/.pixi/envs/default/lib
-   -cclib -L%{project_root}/tree-sitter-jasmin
+   -cclib -L%{env:CONDA_PREFIX=/usr/local}/lib
+   -cclib -Ljasmin-lsp
    -cclib -ltree-sitter
    -cclib -ltree-sitter-jasmin
-   -cclib -Wl,-rpath,%{env:PIXI_PROJECT_ROOT=.}/.pixi/envs/default/lib
-   -cclib -Wl,-rpath,%{project_root}/tree-sitter-jasmin))
+   -cclib -Wl,-rpath,%{env:CONDA_PREFIX=/usr/local}/lib
+   -cclib -Wl,-rpath,@loader_path))
  (foreign_stubs
   (language c)
   (names tree_sitter_stubs)
-  (flags -I%{env:PIXI_PROJECT_ROOT=.}/.pixi/envs/default/include
+  (flags -I%{env:CONDA_PREFIX=/usr/local}/include
          -I%{project_root}/tree-sitter-jasmin/src
          -I%{project_root}/tree-sitter-jasmin/bindings/c))
  (libraries jasmin.jasmin lsp yojson lwt lwt.unix cmdliner batteries ppx_yojson_conv_lib)

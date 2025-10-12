@@ -15,6 +15,7 @@ libtree-sitter = "0.25.*"
 clang = "*"
 
 [activation.env]
+PIXI_PROJECT_ROOT = "$PIXI_PROJECT_ROOT"
 C_INCLUDE_PATH = "$CONDA_PREFIX/include"
 CPLUS_INCLUDE_PATH = "$CONDA_PREFIX/include"
 LIBRARY_PATH = "$CONDA_PREFIX/lib"
