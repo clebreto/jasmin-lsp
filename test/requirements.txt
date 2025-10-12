@@ -1,0 +1,23 @@
+# Python dependencies for jasmin-lsp test suite
+# Install with: pip install -r requirements.txt
+
+# Core testing framework
+pytest>=7.0.0
+
+# Optional: Timeout support for tests
+pytest-timeout>=2.1.0
+
+# Optional: Coverage support
+pytest-cov>=4.0.0
+
+# Optional: Parallel test execution
+pytest-xdist>=3.0.0
+
+# Optional: Better output formatting
+pytest-sugar>=0.9.6
+
+# Optional: Generate HTML test reports
+pytest-html>=3.1.0
+
+# No external dependencies needed - tests use only standard library!
+# The LSP client in conftest.py uses subprocess and json from stdlib.
