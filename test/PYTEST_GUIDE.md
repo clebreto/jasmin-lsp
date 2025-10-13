@@ -12,7 +12,6 @@ The jasmin-lsp test suite has been completely reorganized to use **pytest** as t
 test/
 ├── conftest.py              # Shared fixtures and utilities
 ├── pytest.ini               # Pytest configuration
-├── requirements.txt         # Python dependencies
 ├── fixtures/                # Test fixture files (*.jazz)
 │   ├── simple_function.jazz
 │   ├── types_test.jazz
@@ -54,83 +53,92 @@ test/
 
 ### Prerequisites
 
-1. **Build the LSP server** (required):
-   ```bash
-   cd /path/to/jasmin-lsp
-   pixi run build
-   ```
+All dependencies (including Python and pytest) are managed by pixi:
 
-2. **Install Python dependencies** (optional but recommended):
-   ```bash
-   cd test
-   pip install -r requirements.txt
-   ```
+```bash
+cd /path/to/jasmin-lsp
+pixi install
+```
 
-   The test suite uses only Python standard library, but the requirements.txt provides optional enhancements:
-   - `pytest-timeout`: Timeout support for slow tests
-   - `pytest-cov`: Coverage reporting
-   - `pytest-xdist`: Parallel test execution
-   - `pytest-sugar`: Better output formatting
-   - `pytest-html`: HTML test reports
+This installs:
+- Python 3.8+
+- pytest and all testing plugins:
+  - `pytest-timeout`: Timeout support for slow tests
+  - `pytest-cov`: Coverage reporting
+  - `pytest-xdist`: Parallel test execution
+  - `pytest-sugar`: Better output formatting
+  - `pytest-html`: HTML test reports
+- OCaml toolchain and build dependencies
+- tree-sitter libraries
 
 ## Running Tests
 
-### Run All Tests
+### Run All Tests (Recommended)
 
+From the project root:
 ```bash
-cd test
-pytest
+pixi run test
 ```
 
-This discovers and runs all tests in all categories.
+This automatically builds the LSP server and runs the full test suite.
+
+### Alternative: Direct pytest
+
+```bash
+pixi run pytest test
+```
 
 ### Run Tests by Category
 
 ```bash
 # Hover tests only
-pytest test_hover/
+pixi run pytest test/test_hover/
 
 # Navigation tests only
-pytest test_navigation/
+pixi run pytest test/test_navigation/
 
 # Diagnostics tests
-pytest test_diagnostics/
+pixi run pytest test/test_diagnostics/
 
 # Cross-file tests
-pytest test_cross_file/
+pixi run pytest test/test_cross_file/
 
 # Performance tests
-pytest test_performance/
+pixi run pytest test/test_performance/
 
 # Crash/robustness tests
-pytest test_crash/
+pixi run pytest test/test_crash/
 
 # Symbol tests
+pixi run pytest test/test_symbols/
 pytest test_symbols/
 
 # Master file tests
 pytest test_master_file/
 ```
 
+> **Note**: All `pytest` commands below can be run with `pixi run pytest test/...` from the project root, or directly as `pytest ...` from within the `test/` directory if you're in an active pixi shell (`pixi shell`).
+
 ### Run a Specific Test File
 
 ```bash
-pytest test_hover/test_keyword_hover.py
+pixi run pytest test/test_hover/test_keyword_hover.py
 ```
 
 ### Run a Specific Test Function
 
 ```bash
-pytest test_hover/test_keyword_hover.py::test_hover_on_function_name
+pixi run pytest test/test_hover/test_keyword_hover.py::test_hover_on_function_name
 ```
 
 ### Run Tests Matching a Pattern
 
 ```bash
 # Run all tests with "hover" in the name
-pytest -k hover
+pixi run pytest test -k hover
 
 # Run all tests with "goto" or "definition"
+pixi run pytest test -k "goto or definition"
 pytest -k "goto or definition"
 
 # Exclude slow tests

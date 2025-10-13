@@ -129,12 +129,25 @@ jasmin-lsp/
 
 ### Testing
 
-```bash
-# Run test suite
-cd test
-python3 run_tests.py
+Run the full test suite (automatically builds the LSP server first):
 
-# Or use shell-based tests
+```bash
+pixi run test
+```
+
+For more control over pytest:
+
+```bash
+pixi run pytest test           # Run all tests
+pixi run pytest test -v        # Verbose output
+pixi run pytest test -k hover  # Run specific tests
+pixi run pytest test --cov     # With coverage
+```
+
+Alternative shell-based tests:
+
+```bash
+cd test
 ./test_all.sh
 ```
 

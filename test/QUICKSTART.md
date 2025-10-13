@@ -6,49 +6,50 @@ All tests have been reorganized into a modern pytest-based structure with tests 
 
 ## Quick Commands
 
-### Run All Tests
+### Run All Tests (Recommended)
+
+From the project root:
 ```bash
-cd test
-pytest
+pixi run test
 ```
+
+This automatically builds the LSP server and runs all tests.
 
 ### Run Specific Category
 ```bash
-cd test
-pytest test_hover/         # Hover functionality tests
-pytest test_navigation/    # Go-to-definition, find references
-pytest test_diagnostics/   # Error detection and reporting
-pytest test_cross_file/    # Cross-file features (require statements)
-pytest test_performance/   # Performance and stress tests
-pytest test_crash/         # Crash and robustness tests
-pytest test_symbols/       # Document/workspace symbols, rename
-pytest test_master_file/   # Master file functionality
+pixi run pytest test/test_hover/         # Hover functionality tests
+pixi run pytest test/test_navigation/    # Go-to-definition, find references
+pixi run pytest test/test_diagnostics/   # Error detection and reporting
+pixi run pytest test/test_cross_file/    # Cross-file features (require statements)
+pixi run pytest test/test_performance/   # Performance and stress tests
+pixi run pytest test/test_crash/         # Crash and robustness tests
+pixi run pytest test/test_symbols/       # Document/workspace symbols, rename
+pixi run pytest test/test_master_file/   # Master file functionality
 ```
 
 ### Run Specific Test
 ```bash
-cd test
-pytest test_hover/test_keyword_hover.py                           # One file
-pytest test_hover/test_keyword_hover.py::test_hover_on_function_name  # One test
+pixi run pytest test/test_hover/test_keyword_hover.py                           # One file
+pixi run pytest test/test_hover/test_keyword_hover.py::test_hover_on_function_name  # One test
 ```
 
 ### Run with Options
 ```bash
-cd test
-pytest -v           # Verbose output
-pytest -s           # Show print statements
-pytest -k "hover"   # Run tests matching "hover"
-pytest -n auto      # Parallel execution (if pytest-xdist installed)
-pytest --cov=.      # With coverage report
+pixi run pytest test -v           # Verbose output
+pixi run pytest test -s           # Show print statements
+pixi run pytest test -k "hover"   # Run tests matching "hover"
+pixi run pytest test -n auto      # Parallel execution (pytest-xdist included)
+pixi run pytest test --cov        # With coverage report (pytest-cov included)
 ```
 
 ## Test Structure
 
 ```
+```
 test/
 ├── conftest.py              # Shared fixtures and LSP client ⭐
 ├── pytest.ini               # Pytest configuration
-├── requirements.txt         # Optional dependencies
+```
 ├── PYTEST_GUIDE.md          # Complete documentation
 ├── TEST_REORGANIZATION_SUMMARY.md  # Detailed summary
 ├── migrate_tests.sh         # Migration helper
@@ -131,45 +132,50 @@ This includes:
 - CI/CD integration
 - Migration guide
 
-## Installation (Optional)
+## Installation
 
-The tests work with just pytest, but you can install extras:
+All dependencies (Python, pytest, and plugins) are managed by pixi:
 
 ```bash
-cd test
-pip install -r requirements.txt
+cd /path/to/jasmin-lsp
+pixi install
 ```
 
-This adds:
+This automatically installs:
+- Python 3.8+
+- pytest 7.0+
 - `pytest-timeout` - Timeout support
 - `pytest-cov` - Coverage reports
 - `pytest-xdist` - Parallel execution
 - `pytest-sugar` - Better output
 - `pytest-html` - HTML reports
+- OCaml toolchain and all build dependencies
 
 ## Common Commands
 
+From the project root:
+
 ```bash
-# Run all tests
-pytest
+# Run all tests (builds LSP first)
+pixi run test
 
 # Run one category
-pytest test_hover/
+pixi run pytest test/test_hover/
 
 # Run verbose
-pytest -v
+pixi run pytest test -v
 
 # Run with coverage
-pytest --cov=. --cov-report=html
+pixi run pytest test --cov --cov-report=html
 
 # Run in parallel (faster!)
-pytest -n auto
+pixi run pytest test -n auto
 
 # Run only failed tests from last run
-pytest --lf
+pixi run pytest test --lf
 
 # Show test durations
-pytest --durations=10
+pixi run pytest test --durations=10
 
 # Skip slow tests
 pytest -m "not slow"

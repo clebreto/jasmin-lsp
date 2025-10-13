@@ -25,14 +25,27 @@ Sample Jasmin programs for testing various features:
 
 ### Prerequisites
 
-Build the LSP server first:
+The test dependencies are included in the pixi environment. Simply install with:
 
 ```bash
 cd ..
-pixi run build
+pixi install
 ```
 
-### Quick Test (Shell Script)
+This will install Python, pytest, and all testing plugins automatically.
+
+### Quick Test (Recommended)
+
+Run all tests using pixi:
+
+```bash
+cd ..
+pixi run test
+```
+
+This builds the LSP server and runs the full pytest suite.
+
+### Alternative: Shell Script Tests
 
 ```bash
 ./test_all.sh
@@ -40,15 +53,17 @@ pixi run build
 
 This runs all tests using shell commands and shows pass/fail results.
 
-### Comprehensive Test (Python Script)
+### Running Pytest Directly
+
+If you prefer to run pytest with custom options:
 
 ```bash
-python3 test_lsp.py
+cd ..
+pixi run pytest test           # Run all tests
+pixi run pytest test -v        # Verbose output
+pixi run pytest test -k hover  # Run only hover tests
+pixi run pytest test --cov     # With coverage report
 ```
-
-This provides more detailed output and better error messages.
-
-Requires Python 3.6+. No additional dependencies needed.
 
 ## Test Coverage
 

@@ -33,5 +33,7 @@ _opam/
 .vscode/
 .zed/
 
+*__pycache__*
+
 # Pixi
 .pixi/
