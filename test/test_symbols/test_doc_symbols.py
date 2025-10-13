@@ -27,7 +27,20 @@ for msg in messages:
     input_data += header + content
 
 proc = subprocess.Popen([server_path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-stdout, stderr = proc.communicate(input=input_data.encode(), timeout=5)
+try:
+    stdout, stderr = proc.communicate(input=input_data.encode(), timeout=5)
+except subprocess.TimeoutExpired:
+    proc.kill()
+    proc.communicate()
+    raise
+finally:
+    # Ensure process is terminated
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
 
 output = stdout.decode('utf-8', errors='ignore')
 while 'Content-Length:' in output:

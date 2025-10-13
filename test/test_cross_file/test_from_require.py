@@ -99,7 +99,20 @@ fn main() -> reg u32 {
             stderr=subprocess.PIPE
         )
         
-        stdout, stderr = proc.communicate(input=input_data.encode('utf-8'), timeout=10)
+        try:
+            stdout, stderr = proc.communicate(input=input_data.encode('utf-8'), timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise
+        finally:
+            # Ensure process is terminated
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
         
         # Parse responses
         responses = []

@@ -13,8 +13,11 @@ def test_server_survives_invalid_json():
     client.start()
     
     try:
-        # Send invalid JSON
-        client.process.stdin.write(b"Content-Length: 20\r\n\r\n{invalid json here}")
+        # Send invalid JSON with correct Content-Length
+        invalid_json = b"{invalid json here}"
+        content_length = len(invalid_json)
+        client.process.stdin.write(f"Content-Length: {content_length}\r\n\r\n".encode('utf-8'))
+        client.process.stdin.write(invalid_json)
         client.process.stdin.flush()
         
         time.sleep(0.5)

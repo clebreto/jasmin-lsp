@@ -40,7 +40,20 @@ def test_scenario(name, setup_func, test_line, test_char, expected_file_rel):
         
         proc = subprocess.Popen([server_path], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = proc.communicate(input=input_data.encode(), timeout=10)
+        try:
+            stdout, stderr = proc.communicate(input=input_data.encode(), timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise
+        finally:
+            # Ensure process is terminated
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
         
         # Parse responses
         responses = []

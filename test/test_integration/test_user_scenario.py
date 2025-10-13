@@ -38,7 +38,20 @@ def test_from_common_require_navigation():
         input_data = ''.join(f'Content-Length: {len(json.dumps(m).encode())}\r\n\r\n{json.dumps(m)}' for m in messages)
         
         proc = subprocess.Popen([server_path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, _ = proc.communicate(input=input_data.encode(), timeout=10)
+        try:
+            stdout, _ = proc.communicate(input=input_data.encode(), timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            pytest.fail("LSP server timed out after 10 seconds")
+        finally:
+            # Ensure process is terminated
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
         
         # Parse response
         output = stdout.decode('utf-8', errors='ignore')
