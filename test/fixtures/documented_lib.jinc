@@ -1,0 +1,45 @@
+// Library file with documented functions and constants
+
+// This constant defines the buffer size for operations
+// It is set to 1024 bytes for optimal performance
+param int BUFFER_SIZE = 1024;
+
+// Maximum number of iterations allowed
+param int MAX_ITERATIONS = 100;
+
+/*
+ * Computes the square of a number
+ * This function takes a 64-bit unsigned integer and returns its square
+ * Use this for fast squaring operations
+ */
+fn square(reg u64 x) -> reg u64 {
+  reg u64 result;
+  result = x * x;
+  return result;
+}
+
+// Adds two numbers together
+// Returns the sum of x and y
+fn add(reg u64 x, reg u64 y) -> reg u64 {
+  reg u64 sum;
+  sum = x + y;
+  return sum;
+}
+
+/*
+ * Performs a complex calculation
+ * This function demonstrates multiple variable declarations
+ * and shows how documentation works with local variables
+ */
+fn complex_calc(reg u64 input) -> reg u64 {
+  // Temporary storage for intermediate result
+  reg u64 temp;
+  
+  // Final result of the calculation
+  reg u64 output;
+  
+  temp = square(input);
+  output = add(temp, #42);
+  
+  return output;
+}

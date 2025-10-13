@@ -16,6 +16,7 @@ type symbol = {
   definition_range: TreeSitter.range;
   uri: Lsp.Types.DocumentUri.t;
   detail: string option;
+  documentation: string option;
 }
 
 type reference = {
@@ -29,6 +30,136 @@ let point_to_position point =
   Lsp.Types.Position.create 
     ~line:point.TreeSitter.row 
     ~character:point.TreeSitter.column
+
+(** Extract documentation comments immediately before a node *)
+let extract_doc_comment source node =
+  let range = TreeSitter.node_range node in
+  let start_point = range.TreeSitter.start_point in
+  
+  (* Look for comments on the line(s) immediately before this node *)
+  if start_point.TreeSitter.row = 0 then None
+  else
+    (* Get text from start of file to start of node *)
+    let text_before = String.sub source 0 range.TreeSitter.start_byte in
+    
+    (* Split into lines *)
+    let lines = String.split_on_char '\n' text_before in
+    let lines_array = Array.of_list lines in
+    let target_line = start_point.TreeSitter.row in
+    
+    (* Check if a line ends with */ *)
+    let ends_with_comment_close line =
+      let trimmed = String.trim line in
+      String.length trimmed >= 2 && 
+      String.sub trimmed (String.length trimmed - 2) 2 = "*/"
+    in
+    
+    (* Look backwards from the line before the node *)
+    let rec collect_comments line_idx blank_count =
+      if line_idx < 0 then None
+      else
+        let line = String.trim lines_array.(line_idx) in
+        if line = "" then
+          (* Empty line - allow up to 1 blank line between comment and declaration *)
+          if blank_count >= 1 then None
+          else collect_comments (line_idx - 1) (blank_count + 1)
+        else if String.length line >= 2 && String.sub line 0 2 = "//" then
+          (* Single-line comment - collect consecutive // comments *)
+          let rec collect_single_line idx acc =
+            if idx < 0 then acc
+            else
+              let curr_line = String.trim lines_array.(idx) in
+              if String.length curr_line >= 2 && String.sub curr_line 0 2 = "//" then
+                let comment_text = String.sub curr_line 2 (String.length curr_line - 2) |> String.trim in
+                collect_single_line (idx - 1) (comment_text :: acc)
+              else if String.trim curr_line = "" && acc <> [] then
+                (* Allow one blank line within comment block *)
+                collect_single_line (idx - 1) acc
+              else
+                acc
+          in
+          let comments = collect_single_line line_idx [] in
+          Some (String.concat "\n" comments)
+        else if ends_with_comment_close line then
+          (* Found end of multi-line comment, search backwards for start *)
+          let rec find_start idx acc_lines =
+            if idx < 0 then acc_lines
+            else
+              let curr_line = String.trim lines_array.(idx) in
+              let acc_lines' = curr_line :: acc_lines in
+              if String.length curr_line >= 2 && String.sub curr_line 0 2 = "/*" then
+                acc_lines'
+              else
+                find_start (idx - 1) acc_lines'
+          in
+          let comment_lines = find_start line_idx [] in
+          (* Clean up each line: remove /*, */, and leading * while preserving indentation *)
+          let cleaned_lines = List.map (fun line ->
+            (* Find the position of the leading * in the original line *)
+            let trimmed = String.trim line in
+            
+            (* Handle /* on the first line *)
+            if String.length trimmed >= 2 && String.sub trimmed 0 2 = "/*" then
+              (* Remove /* and everything on this line - it's just the opening *)
+              let after = String.sub trimmed 2 (String.length trimmed - 2) in
+              let cleaned = String.trim after in
+              (* Remove trailing */ if present *)
+              if String.length cleaned >= 2 && 
+                 String.sub cleaned (String.length cleaned - 2) 2 = "*/" then
+                String.sub cleaned 0 (String.length cleaned - 2) |> String.trim
+              else
+                cleaned
+            (* Handle */ on the last line *)
+            else if String.length trimmed >= 2 && 
+                    String.sub trimmed (String.length trimmed - 2) 2 = "*/" then
+              let before = String.sub trimmed 0 (String.length trimmed - 2) in
+              let without_star = 
+                if String.length before >= 1 && String.get before 0 = '*' then
+                  let after_star = String.sub before 1 (String.length before - 1) in
+                  if String.length after_star > 0 && String.get after_star 0 = ' ' then
+                    String.sub after_star 1 (String.length after_star - 1)
+                  else
+                    after_star
+                else
+                  before
+              in
+              String.trim without_star
+            (* Handle regular lines with leading * *)
+            else if String.length trimmed >= 1 && String.get trimmed 0 = '*' then
+              (* Remove the * and exactly one space if present, preserve rest *)
+              let after_star = String.sub trimmed 1 (String.length trimmed - 1) in
+              if String.length after_star > 0 && String.get after_star 0 = ' ' then
+                String.sub after_star 1 (String.length after_star - 1)
+              else
+                after_star
+            else
+              line
+          ) comment_lines in
+          (* Join with newlines, preserving internal blank lines and indentation *)
+          let doc_text = String.concat "\n" cleaned_lines in
+          (* Trim leading and trailing blank lines but preserve internal ones and indentation *)
+          let rec trim_start lines =
+            match lines with
+            | [] -> []
+            | hd :: tl when String.trim hd = "" -> trim_start tl
+            | _ -> lines
+          in
+          let trim_end lines =
+            trim_start (List.rev lines) |> List.rev
+          in
+          let final_lines = String.split_on_char '\n' doc_text |> trim_start |> trim_end in
+          (* Add two trailing spaces to each non-empty line for markdown line breaks *)
+          let markdown_lines = List.map (fun line ->
+            if String.trim line = "" then line
+            else line ^ "  "  (* Two spaces force a line break in markdown *)
+          ) final_lines in
+          Some (String.concat "\n" markdown_lines)
+        else
+          (* Non-comment line - stop *)
+          None
+    in
+    
+    collect_comments (target_line - 1) 0
 
 (** Extract required file paths from a document *)
 let rec extract_requires_from_node uri source node acc =
@@ -326,6 +457,9 @@ let rec extract_symbols_from_node uri source node acc =
   let node_type = TreeSitter.node_type node in
   let range = TreeSitter.node_range node in
   
+  (* Extract documentation comment for this node *)
+  let doc = extract_doc_comment source node in
+  
   (* Extract symbol(s) based on node type *)
   let acc = match node_type with
   | "function_definition" ->
@@ -338,6 +472,7 @@ let rec extract_symbols_from_node uri source node acc =
             definition_range = range;
             uri;
             detail;
+            documentation = doc;
           } :: acc
       | None -> acc)
       
@@ -351,6 +486,7 @@ let rec extract_symbols_from_node uri source node acc =
           definition_range = var_range;
           uri;
           detail;
+          documentation = doc;
         } :: acc
       ) acc var_infos
       
@@ -364,6 +500,7 @@ let rec extract_symbols_from_node uri source node acc =
             definition_range = range;
             uri;
             detail;
+            documentation = doc;
           } :: acc
       | None -> acc)
       
@@ -377,6 +514,7 @@ let rec extract_symbols_from_node uri source node acc =
           definition_range = param_range;
           uri;
           detail;
+          documentation = doc;
         } :: acc
       ) acc param_infos
   
@@ -406,6 +544,7 @@ let rec extract_symbols_from_node uri source node acc =
             definition_range = range;
             uri;
             detail;
+            documentation = doc;
           } :: acc
       | None -> acc)
   
@@ -426,6 +565,7 @@ let rec extract_symbols_from_node uri source node acc =
             definition_range = range;
             uri;
             detail;
+            documentation = doc;
           } :: acc
       | None -> acc)
       
@@ -440,6 +580,7 @@ let rec extract_symbols_from_node uri source node acc =
             definition_range = range;
             uri;
             detail = Some "type";
+            documentation = doc;
           } :: acc
       | None -> acc)
       

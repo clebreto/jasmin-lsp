@@ -16,6 +16,7 @@ type symbol = {
   definition_range: TreeSitter.range;
   uri: Lsp.Types.DocumentUri.t;
   detail: string option; (* Type information or signature *)
+  documentation: string option; (* Documentation comment *)
 }
 
 (** Reference information *)

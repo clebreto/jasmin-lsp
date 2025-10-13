@@ -1,0 +1,14 @@
+/*************************************************
+ * Name:        JASMIN_MLDSA_poly_add
+ *
+ * Description: Add polynomials. No modular reduction is performed.
+ *
+ * Arguments:   - poly *c: pointer to output polynomial
+ *              - const poly *a: pointer to first summand
+ *              - const poly *b: pointer to second summand
+ **************************************************/
+fn poly_add(reg u64 c, reg u64 a, reg u64 b) -> reg u64 {
+  reg u64 result;
+  result = a + b;
+  return result;
+}

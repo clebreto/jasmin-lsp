@@ -673,7 +673,7 @@ let receive_text_document_hover_request (params : Lsp.Types.HoverParams.t) =
               Ok None, []  (* Return None instead of error for unknown symbols *)
           | Some symbol ->
               (* Format hover content based on symbol kind *)
-              let markdown_value = match symbol.kind with
+              let base_markdown = match symbol.kind with
               | Document.SymbolTable.Parameter | Document.SymbolTable.Variable ->
                   (match symbol.detail with
                   | Some type_str -> 
@@ -716,6 +716,14 @@ let receive_text_document_hover_request (params : Lsp.Types.HoverParams.t) =
                           (* Fallback for unexpected format *)
                           Format.asprintf "```jasmin\nparam %s: %s\n```" symbol.name detail_str)
                   | None -> Format.asprintf "```jasmin\nconst %s\n```" symbol.name)
+              in
+              
+              (* Add documentation if available *)
+              let markdown_value = match symbol.documentation with
+              | Some doc -> 
+                  (* Add a horizontal rule and documentation section *)
+                  Format.asprintf "%s\n\n---\n\n%s" base_markdown doc
+              | None -> base_markdown
               in
               
               let hover_content = `MarkupContent (Lsp.Types.MarkupContent.create

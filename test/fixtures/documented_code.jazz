@@ -1,0 +1,67 @@
+// Main program with documented functions and variables
+
+require "documented_lib.jinc"
+
+/*
+ * Application entry point
+ * This is the main function that processes user input
+ * 
+ * Parameters:
+ *   - input: The value to process
+ * 
+ * Returns:
+ *   - The processed result
+ */
+export fn main(reg u64 input) -> reg u64 {
+  // Counter for loop iterations
+  reg u64 counter;
+  
+  /*
+   * Result accumulator
+   * Stores the accumulated result of operations
+   */
+  reg u64 result;
+  
+  counter = 0;
+  result = input;
+  
+  // Process the input using library function
+  result = square(result);
+  
+  // Add buffer size to result
+  result = result + BUFFER_SIZE;
+  
+  return result;
+}
+
+// Helper function to check if a value is within bounds
+// Returns 1 if value is less than MAX_ITERATIONS, 0 otherwise
+fn is_valid(reg u64 value) -> reg u64 {
+  reg u64 max;
+  reg u64 ret;
+  
+  max = MAX_ITERATIONS;
+  
+  if (value < max) {
+    ret = 1;
+  } else {
+    ret = 0;
+  }
+  
+  return ret;
+}
+
+/*
+ * Multiplies a value by a constant factor
+ * 
+ * This function demonstrates parameter documentation
+ * and shows how multi-line comments are handled
+ */
+fn multiply_by_factor(reg u64 value) -> reg u64 {
+  // Multiplication factor
+  param int FACTOR = 10;
+  
+  reg u64 result;
+  result = value * FACTOR;
+  return result;
+}
