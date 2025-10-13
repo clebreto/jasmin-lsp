@@ -9,6 +9,7 @@ import subprocess
 import os
 import tempfile
 import time
+import shutil
 from pathlib import Path
 
 # Server path - use absolute path from project root
@@ -16,7 +17,9 @@ LSP_SERVER = Path(__file__).parent.parent.parent / "_build/default/jasmin-lsp/ja
 
 def create_test_files():
     """Create test files for cross-file hover testing."""
-    test_dir = Path("test_hover_files")
+    # Use temporary directory instead of creating at root
+    temp_dir = tempfile.mkdtemp(prefix="test_hover_files_")
+    test_dir = Path(temp_dir)
     test_dir.mkdir(exist_ok=True)
     
     # Create lib directory
@@ -321,6 +324,13 @@ def test_cross_file_hover():
     finally:
         proc.terminate()
         proc.wait(timeout=5)
+        
+        # Clean up temporary directory
+        try:
+            shutil.rmtree(test_dir)
+            print(f"\n✓ Cleaned up temporary directory: {test_dir}")
+        except Exception as e:
+            print(f"\n⚠ Failed to clean up temporary directory: {e}")
 
 if __name__ == "__main__":
     test_cross_file_hover()
