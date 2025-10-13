@@ -1,0 +1,34 @@
+// Test program that uses namespace-based requires
+// This should be able to jump to Common/reduce.jinc when clicking on the require string
+
+from Common require "reduce.jinc"
+
+export fn test_namespace_navigation() -> reg u64 {
+  reg u64 array_ptr;
+  reg u32 length;
+  reg u64 result;
+  
+  // Initialize test array (simplified for testing)
+  array_ptr = #0x1000;
+  length = #5;
+  
+  // Use function from reduce.jinc
+  result = reduce_sum(array_ptr, length);
+  
+  return result;
+}
+
+export fn test_min_max() -> reg u64 {
+  reg u64 array_ptr;
+  reg u32 length;
+  reg u64 min_val;
+  reg u64 max_val;
+  
+  array_ptr = #0x1000;
+  length = #5;
+  
+  min_val = reduce_min(array_ptr, length);
+  max_val = reduce_max(array_ptr, length);
+  
+  return min_val + max_val;
+}

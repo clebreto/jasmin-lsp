@@ -183,22 +183,109 @@ let receive_text_document_definition_request (params : Lsp.Types.DefinitionParam
         | Some parent -> is_in_require_statement parent
   in
   
-  (* Helper: Resolve file path relative to current document *)
-  let resolve_required_file current_uri filename =
+  (* Helper: Resolve file path using namespace-aware logic from SymbolTable *)
+  let resolve_required_file_namespace_aware current_uri node source =
     try
-      let current_path = Lsp.Uri.to_path current_uri in
-      let current_dir = Filename.dirname current_path in
-      let resolved_path = Filename.concat current_dir filename in
+      (* Use the same logic as SymbolTable.extract_requires_from_node *)
+      (* Check if there's a 'from' clause with a namespace *)
+      let require_node = 
+        (* Find the parent require node *)
+        let rec find_require_parent n =
+          match TreeSitter.node_type n with
+          | "require" -> Some n
+          | _ -> 
+              (match TreeSitter.node_parent n with
+              | Some parent -> find_require_parent parent  
+              | None -> None)
+        in
+        find_require_parent node
+      in
       
-      (* Check if file exists *)
-      if Sys.file_exists resolved_path then
-        Some (Lsp.Uri.of_path resolved_path)
-      else (
-        Io.Logger.log (Format.asprintf "Required file not found: %s" resolved_path);
-        None
-      )
+      match require_node with
+      | None -> None
+      | Some req_node ->
+          let namespace_opt = 
+            let child_count = TreeSitter.node_named_child_count req_node in
+            let rec find_from i =
+              if i >= child_count then None
+              else
+                match TreeSitter.node_named_child req_node i with
+                | None -> find_from (i + 1)
+                | Some child ->
+                    if TreeSitter.node_type child = "from" then
+                      (* Extract the namespace identifier from the 'from' node *)
+                      match TreeSitter.node_child_by_field_name child "id" with
+                      | Some id_node -> Some (TreeSitter.node_text id_node source)
+                      | None -> find_from (i + 1)
+                    else
+                      find_from (i + 1)
+            in
+            find_from 0
+          in
+          
+          (* Find the filename from the string literal *)
+          let filename = TreeSitter.node_text node source in
+          (* Remove quotes if present *)
+          let filename = 
+            if String.length filename >= 2 && 
+               String.get filename 0 = '"' && 
+               String.get filename (String.length filename - 1) = '"' 
+            then String.sub filename 1 (String.length filename - 2)
+            else filename
+          in
+          
+          let current_path = Lsp.Uri.to_path current_uri in
+          let current_dir = Filename.dirname current_path in
+          
+          (* If there's a namespace, we need to search for it *)
+          let resolved_path = match namespace_opt with
+            | Some ns ->
+                (* Search for namespace directory in current dir and parent dirs *)
+                (* Try lowercase version of namespace (e.g., "Common" -> "common") *)
+                let ns_lower = String.lowercase_ascii ns in
+                
+                (* Try: current_dir/namespace/filename *)
+                let try1 = Filename.concat (Filename.concat current_dir ns) filename in
+                let try2 = Filename.concat (Filename.concat current_dir ns_lower) filename in
+                
+                (* Try: parent_dir/namespace/filename (for sibling directories) *)
+                let parent_dir = Filename.dirname current_dir in
+                let try3 = Filename.concat (Filename.concat parent_dir ns) filename in
+                let try4 = Filename.concat (Filename.concat parent_dir ns_lower) filename in
+                
+                (* Try: grandparent_dir/namespace/filename *)
+                let grandparent_dir = Filename.dirname parent_dir in
+                let try5 = Filename.concat (Filename.concat grandparent_dir ns) filename in
+                let try6 = Filename.concat (Filename.concat grandparent_dir ns_lower) filename in
+                
+                Io.Logger.log (Format.asprintf "Namespace-aware resolving: from %s require \"%s\"" ns filename);
+                Io.Logger.log (Format.asprintf "  Current dir: %s" current_dir);
+                
+                (* Return first existing path *)
+                if Sys.file_exists try1 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try1); Some try1)
+                else if Sys.file_exists try2 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try2); Some try2)
+                else if Sys.file_exists try3 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try3); Some try3)
+                else if Sys.file_exists try4 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try4); Some try4)
+                else if Sys.file_exists try5 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try5); Some try5)
+                else if Sys.file_exists try6 then (Io.Logger.log (Format.asprintf "  Resolved to: %s" try6); Some try6)
+                else (Io.Logger.log "  NOT FOUND in any namespace location"; None)
+            | None ->
+                (* No namespace, resolve relative to current dir *)
+                let path = Filename.concat current_dir filename in
+                if Sys.file_exists path then (
+                  Io.Logger.log (Format.asprintf "Simple require resolved to: %s" path);
+                  Some path
+                ) else (
+                  Io.Logger.log (Format.asprintf "Simple require NOT FOUND: %s" path);
+                  None
+                )
+          in
+          
+          (match resolved_path with
+          | Some path -> Some (Lsp.Uri.of_path path)
+          | None -> None)
     with e ->
-      Io.Logger.log (Format.asprintf "Error resolving file path: %s" (Printexc.to_string e));
+      Io.Logger.log (Format.asprintf "Error in namespace-aware file resolution: %s" (Printexc.to_string e));
       None
   in
   
@@ -235,7 +322,7 @@ let receive_text_document_definition_request (params : Lsp.Types.DefinitionParam
             let filename = TreeSitter.node_text content_node source in
             Io.Logger.log (Format.asprintf "Attempting to resolve required file: %s" filename);
             
-            match resolve_required_file uri filename with
+            match resolve_required_file_namespace_aware uri content_node source with
             | Some target_uri ->
                 let location = Lsp.Types.Location.create
                   ~uri:target_uri
