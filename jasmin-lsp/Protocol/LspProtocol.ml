@@ -673,25 +673,54 @@ let receive_text_document_hover_request (params : Lsp.Types.HoverParams.t) =
               Ok None, []  (* Return None instead of error for unknown symbols *)
           | Some symbol ->
               (* Format hover content based on symbol kind *)
-              let content = match symbol.kind with
+              let markdown_value = match symbol.kind with
               | Document.SymbolTable.Parameter | Document.SymbolTable.Variable ->
                   (match symbol.detail with
-                  | Some type_str -> Format.asprintf "%s: %s" symbol.name type_str
-                  | None -> Format.asprintf "%s: <unknown type>" symbol.name)
+                  | Some type_str -> 
+                      Format.asprintf "```jasmin\n%s: %s\n```" symbol.name type_str
+                  | None -> 
+                      Format.asprintf "```jasmin\n%s: <unknown type>\n```" symbol.name)
               | Document.SymbolTable.Function ->
                   (match symbol.detail with
-                  | Some fn_sig -> fn_sig
-                  | None -> Format.asprintf "fn %s" symbol.name)
+                  | Some fn_sig -> Format.asprintf "```jasmin\n%s\n```" fn_sig
+                  | None -> Format.asprintf "```jasmin\nfn %s\n```" symbol.name)
               | Document.SymbolTable.Type ->
-                  Format.asprintf "type %s" symbol.name
+                  Format.asprintf "```jasmin\ntype %s\n```" symbol.name
               | Document.SymbolTable.Constant ->
+                  (* Parse detail string to extract type, declared value, and computed value *)
+                  (* Format is: "type = declared_value" or "type = declared_value = computed_value" *)
                   (match symbol.detail with
-                  | Some detail_str -> Format.asprintf "param %s: %s" symbol.name detail_str
-                  | None -> Format.asprintf "const %s" symbol.name)
+                  | Some detail_str ->
+                      (* Split by " = " to get parts *)
+                      let parts = Str.split (Str.regexp " = ") detail_str in
+                      (match parts with
+                      | [type_str; declared_value; computed_value] ->
+                          (* Three parts: type, declared value, computed value *)
+                          (* Check if declared and computed are the same *)
+                          if declared_value = computed_value then
+                            (* Don't duplicate if they're the same - show simple value *)
+                            Format.asprintf "```jasmin\nparam %s: %s\n```\n\n<details>\n<summary>Value</summary>\n\n`%s`\n</details>" 
+                              symbol.name type_str declared_value
+                          else
+                            (* Different values - show both in expandable section *)
+                            Format.asprintf "```jasmin\nparam %s: %s\n```\n\n<details>\n<summary>Value</summary>\n\n**Declared:** `%s`\n\n**Computed:** `%s`\n</details>" 
+                              symbol.name type_str declared_value computed_value
+                      | [type_str; value] ->
+                          (* Two parts: type and value (simple constant with declared value) *)
+                          Format.asprintf "```jasmin\nparam %s: %s\n```\n\n<details>\n<summary>Value</summary>\n\n`%s`\n</details>"
+                            symbol.name type_str value
+                      | [type_str] ->
+                          (* Only type, no value *)
+                          Format.asprintf "```jasmin\nparam %s: %s\n```" symbol.name type_str
+                      | _ ->
+                          (* Fallback for unexpected format *)
+                          Format.asprintf "```jasmin\nparam %s: %s\n```" symbol.name detail_str)
+                  | None -> Format.asprintf "```jasmin\nconst %s\n```" symbol.name)
               in
+              
               let hover_content = `MarkupContent (Lsp.Types.MarkupContent.create
                 ~kind:Lsp.Types.MarkupKind.Markdown
-                ~value:(Format.asprintf "```jasmin\n%s\n```" content))
+                ~value:markdown_value)
               in
               let hover = Lsp.Types.Hover.create
                 ~contents:hover_content
