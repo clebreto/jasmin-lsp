@@ -153,8 +153,12 @@ def test_document_symbols():
     
     proc.terminate()
     
-    return True
+    # Test passes if we got here without errors
+    assert True
 
 if __name__ == "__main__":
-    success = test_document_symbols()
-    sys.exit(0 if success else 1)
+    try:
+        test_document_symbols()
+        sys.exit(0)
+    except:
+        sys.exit(1)

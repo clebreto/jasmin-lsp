@@ -105,11 +105,12 @@ def test_rename_symbol():
     print("Testing Rename Symbol Feature")
     print("="*60)
     
-    # Find LSP server
-    lsp_server = Path(__file__).parent.parent / "_build" / "default" / "jasmin-lsp" / "jasmin_lsp.exe"
+    # Find LSP server (go up to project root: test/test_symbols -> test -> project root)
+    lsp_server = Path(__file__).parent.parent.parent / "_build" / "default" / "jasmin-lsp" / "jasmin_lsp.exe"
     if not lsp_server.exists():
         print(f"❌ LSP server not found: {lsp_server}")
-        return False
+        import pytest
+        pytest.fail(f"LSP server not found: {lsp_server}")
     
     try:
         # Start LSP server
@@ -131,13 +132,15 @@ def test_rename_symbol():
         response = read_lsp_response(proc)
         if not response or "result" not in response:
             print("❌ Failed to initialize")
-            return False
+            import pytest
+            pytest.fail("Failed to initialize")
         
         # Check if renameProvider is advertised
         capabilities = response.get("result", {}).get("capabilities", {})
         if not capabilities.get("renameProvider"):
             print("❌ renameProvider not advertised in capabilities")
-            return False
+            import pytest
+            pytest.fail("renameProvider not advertised in capabilities")
         
         print("✅ renameProvider is advertised")
         
@@ -375,14 +378,17 @@ def test_rename_symbol():
         proc.terminate()
         proc.wait(timeout=2)
         
-        return tests_passed >= tests_total - 1  # Allow 1 failure
+        assert tests_passed >= tests_total - 1, f"Only {tests_passed}/{tests_total} tests passed (allow 1 failure)"
         
     except Exception as e:
         print(f"\n❌ Test failed with exception: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 if __name__ == "__main__":
-    success = test_rename_symbol()
-    sys.exit(0 if success else 1)
+    try:
+        test_rename_symbol()
+        sys.exit(0)
+    except:
+        sys.exit(1)
