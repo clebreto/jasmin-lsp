@@ -26,11 +26,11 @@ TEST_CODE = """fn test(reg u32 a b, stack u64 x y z) -> reg u32 {
     (0, 33, "y", "stack u64", "Parameter 'y'"),
     (0, 35, "z", "stack u64", "Parameter 'z'"),
     # Variable declarations (comma-separated)
-    (1, 11, "i", "reg u16", "Variable 'i'"),
-    (1, 14, "j", "reg u16", "Variable 'j'"),
-    (1, 17, "k", "reg u16", "Variable 'k'"),
-    (2, 12, "p", "stack u8", "Variable 'p'"),
-    (2, 15, "q", "stack u8", "Variable 'q'"),
+    (1, 10, "i", "reg u16", "Variable 'i'"),
+    (1, 13, "j", "reg u16", "Variable 'j'"),
+    (1, 16, "k", "reg u16", "Variable 'k'"),
+    (2, 11, "p", "stack u8", "Variable 'p'"),
+    (2, 14, "q", "stack u8", "Variable 'q'"),
 ])
 def test_multi_declaration_hover(lsp_client, temp_document, line, char, expected_name, expected_type, description):
     """Test that hover shows correct type for each identifier in multi-declarations."""

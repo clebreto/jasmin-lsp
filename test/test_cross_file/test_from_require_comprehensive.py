@@ -7,11 +7,12 @@ import json
 import subprocess
 import os
 import tempfile
+import pytest
 
 server_path = './_build/default/jasmin-lsp/jasmin_lsp.exe'
 
-def test_scenario(name, setup_func, test_line, test_char, expected_file_rel):
-    """Generic test scenario"""
+def run_test_scenario(name, setup_func, test_line, test_char, expected_file_rel):
+    """Generic test scenario - returns True if passed, False otherwise"""
     print(f"\n{'='*70}")
     print(f"Test: {name}")
     print('='*70)
@@ -168,6 +169,59 @@ fn test() {
     
     return main, poly  # Test poly_add
 
+
+# Pytest test functions
+
+def test_simple_namespace():
+    """Test: from Common require "file.jinc" """
+    assert run_test_scenario(
+        "Simple namespace", 
+        test1_simple_namespace, 
+        1, 12, 
+        "Common/poly.jinc"
+    )
+
+
+def test_nested_path():
+    """Test: from Common require "crypto/aes.jinc" """
+    assert run_test_scenario(
+        "Nested path in namespace", 
+        test2_nested_path, 
+        1, 12, 
+        "Common/crypto/aes.jinc"
+    )
+
+
+def test_no_namespace():
+    """Test: require "file.jinc" (no from clause) """
+    assert run_test_scenario(
+        "No namespace (plain require)", 
+        test3_no_namespace, 
+        1, 12, 
+        "poly.jinc"
+    )
+
+
+def test_lowercase_folder():
+    """Test: from common require "file.jinc" (lowercase namespace) """
+    assert run_test_scenario(
+        "Lowercase namespace folder", 
+        test4_lowercase_folder, 
+        1, 12, 
+        "common/poly.jinc"
+    )
+
+
+def test_multiple_requires():
+    """Test: Multiple from/require statements """
+    assert run_test_scenario(
+        "Multiple from/require", 
+        test5_multiple_requires, 
+        3, 2, 
+        "Common/poly.jinc"
+    )
+
+
 if __name__ == "__main__":
     print("="*70)
     print("COMPREHENSIVE FROM/REQUIRE TESTS")
@@ -183,7 +237,7 @@ if __name__ == "__main__":
     
     results = []
     for name, setup, line, char, expected_rel in tests:
-        passed = test_scenario(name, setup, line, char, expected_rel)
+        passed = run_test_scenario(name, setup, line, char, expected_rel)
         results.append((name, passed))
     
     print("\n" + "="*70)

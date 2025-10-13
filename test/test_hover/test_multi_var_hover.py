@@ -21,11 +21,11 @@ TEST_CODE = """fn test() {
 
 
 @pytest.mark.parametrize("line,char,expected_name,expected_type,description", [
-    (1, 11, "i", "reg u32", "First variable 'i' in declaration"),
-    (1, 14, "j", "reg u32", "Second variable 'j' in declaration"),
-    (2, 13, "x", "stack u64", "First stack variable 'x'"),
-    (2, 16, "y", "stack u64", "Second stack variable 'y'"),
-    (2, 19, "z", "stack u64", "Third stack variable 'z'"),
+    (1, 10, "i", "reg u32", "First variable 'i' in declaration"),
+    (1, 13, "j", "reg u32", "Second variable 'j' in declaration"),
+    (2, 12, "x", "stack u64", "First stack variable 'x'"),
+    (2, 15, "y", "stack u64", "Second stack variable 'y'"),
+    (2, 18, "z", "stack u64", "Third stack variable 'z'"),
 ])
 def test_multi_var_hover(lsp_client, temp_document, line, char, expected_name, expected_type, description):
     """Test hover on variables declared with commas."""

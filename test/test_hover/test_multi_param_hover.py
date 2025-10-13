@@ -3,23 +3,27 @@
 Test that hover shows correct type for parameters declared together.
 
 Tests multiple parameters declared with same type:
-  fn test(reg u32 a, b, stack u64 x, y, z) -> reg u32
+  fn test(reg u32 a b, stack u64 x y z) -> reg u32
+  
+Note: Jasmin uses SPACE-separated parameters for the same type,
+not comma-separated. Commas separate different type groups.
 """
 
 import pytest
 
 # Test code with multiple params declared together
-TEST_CODE = """fn test(reg u32 a, b, stack u64 x, y, z) -> reg u32 {
+# Note: Jasmin uses SPACE-separated params for same type, not comma-separated
+TEST_CODE = """fn test(reg u32 a b, stack u64 x y z) -> reg u32 {
   return a;
 }"""
 
 
 @pytest.mark.parametrize("line,char,expected_name,expected_type,description", [
     (0, 16, "a", "reg u32", "First param 'a' with explicit type"),
-    (0, 19, "b", "reg u32", "Second param 'b' sharing type"),
-    (0, 32, "x", "stack u64", "First stack param 'x'"),
-    (0, 35, "y", "stack u64", "Second stack param 'y'"),
-    (0, 38, "z", "stack u64", "Third stack param 'z'"),
+    (0, 18, "b", "reg u32", "Second param 'b' sharing type"),
+    (0, 31, "x", "stack u64", "First stack param 'x'"),
+    (0, 33, "y", "stack u64", "Second stack param 'y'"),
+    (0, 35, "z", "stack u64", "Third stack param 'z'"),
 ])
 def test_multi_param_hover(lsp_client, temp_document, line, char, expected_name, expected_type, description):
     """Test hover on parameters that share a type declaration."""

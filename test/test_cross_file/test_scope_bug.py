@@ -59,54 +59,49 @@ export fn second_function(
         pytest.fail("No definition found for 'status' in first_function")
     
     # Test 2: Go to definition on second 'status' in 'status = status;' in second function
-    # This should jump to line 15 (declaration in second_function), NOT line 4 (first_function)
-    print("\n📍 Test 2: Second 'status' in 'status = status;' in second_function (line 18)")
+    # This should jump to line 14 (declaration in second_function), NOT line 4 (first_function)
+    print("\n📍 Test 2: Second 'status' in 'status = status;' in second_function (line 17)")
     
-    # Try a few different character positions to find 'status'
-    response = None
-    for char_pos in [11, 12, 13, 14, 15]:
-        test_response = lsp_client.definition(uri, line=18, character=char_pos)
-        print(f"  Trying character {char_pos}: {test_response.get('result') if 'result' in test_response else test_response.get('error')}")
-        if "result" in test_response and test_response["result"]:
-            response = test_response
-            break
+    # The second 'status' is at column 13
+    response = lsp_client.definition(uri, line=17, character=13)
+    print(f"  Response: {response.get('result') if 'result' in response else response.get('error')}")
     
     if response and "result" in response and response["result"]:
         location = response["result"][0] if isinstance(response["result"], list) else response["result"]
         def_line = location["range"]["start"]["line"]
         print(f"Definition found at line {def_line}")
         
-        # Should be line 15 (the declaration in second_function)
+        # Should be line 14 (the declaration in second_function)
         # If it's line 4, that's the bug - it jumped to first_function
-        if def_line == 15:
+        if def_line == 14:
             print("✅ CORRECT: Jumped to declaration in second_function")
         elif def_line == 4:
-            pytest.skip("Known bug: Go-to-definition jumps to wrong function (line 4 instead of 15)")
+            pytest.fail("Bug: Go-to-definition jumps to wrong function (line 4 instead of 14)")
         else:
-            pytest.fail(f"Unexpected: Got line {def_line}, expected 4 or 15")
+            pytest.fail(f"Unexpected: Got line {def_line}, expected 4 or 14")
     else:
         # If we can't find the symbol, this test isn't working as expected
-        pytest.skip("Cannot test scope resolution - 'status' symbol not found on line 18")
+        pytest.fail(f"Cannot find 'status' symbol on line 17: {response}")
     
-    # Test 3: Go to definition on first 'status' in 'status = status;' (should also go to line 15)
-    print("\n📍 Test 3: First 'status' in 'status = status;' in second_function (line 18)")
+    # Test 3: Go to definition on first 'status' in 'status = status;' (should also go to line 14)
+    print("\n📍 Test 3: First 'status' in 'status = status;' in second_function (line 17)")
     
-    # Try a few character positions
-    response = None
-    for char_pos in [4, 5, 6, 7]:
-        test_response = lsp_client.definition(uri, line=18, character=char_pos)
-        if "result" in test_response and test_response["result"]:
-            response = test_response
-            break
+    # The first 'status' is at column 4
+    response = lsp_client.definition(uri, line=17, character=4)
     
     if response and "result" in response and response["result"]:
         location = response["result"][0] if isinstance(response["result"], list) else response["result"]
         def_line = location["range"]["start"]["line"]
         print(f"Definition found at line {def_line}")
         
-        if def_line == 15:
+        if def_line == 14:
             print("✅ CORRECT: Jumped to declaration in second_function")
         elif def_line == 4:
-            pytest.skip("Known bug: Go-to-definition jumps to wrong function")
+            pytest.fail("Bug: Go-to-definition jumps to wrong function")
         else:
             print(f"⚠️ Unexpected line: {def_line}")
+    else:
+        pytest.fail(f"Cannot find 'status' symbol on line 17 at column 4: {response}")
+    
+    print("\n✅ All scope resolution tests passed!")
+

@@ -71,11 +71,12 @@ def test_document_symbols():
     print("Testing Document Symbols Feature")
     print("="*60)
     
-    # Find LSP server
-    lsp_server = Path(__file__).parent.parent / "_build" / "default" / "jasmin-lsp" / "jasmin_lsp.exe"
+    # Find LSP server (go up to project root: test/test_symbols -> test -> project root)
+    lsp_server = Path(__file__).parent.parent.parent / "_build" / "default" / "jasmin-lsp" / "jasmin_lsp.exe"
     if not lsp_server.exists():
         print(f"❌ LSP server not found: {lsp_server}")
-        return False
+        import pytest
+        pytest.fail(f"LSP server not found: {lsp_server}")
     
     try:
         # Prepare messages
@@ -142,12 +143,14 @@ def test_document_symbols():
         
         if not init_response:
             print("❌ No initialization response found")
-            return False
+            import pytest
+            pytest.fail("No initialization response found")
         
         capabilities = init_response.get("result", {}).get("capabilities", {})
         if not capabilities.get("documentSymbolProvider"):
             print("❌ documentSymbolProvider not advertised")
-            return False
+            import pytest
+            pytest.fail("documentSymbolProvider not advertised")
         
         print("✅ documentSymbolProvider is advertised")
         
@@ -161,21 +164,25 @@ def test_document_symbols():
         
         if not response:
             print("❌ No response received")
-            return False
+            import pytest
+            pytest.fail("No response received")
         
         if "error" in response:
             print(f"❌ Error response: {response['error']}")
-            return False
+            import pytest
+            pytest.fail(f"Error response: {response['error']}")
         
         if "result" not in response:
             print("❌ No result in response")
-            return False
+            import pytest
+            pytest.fail("No result in response")
         
         symbols = response["result"]
         
         if symbols is None:
             print("❌ Symbols list is None")
-            return False
+            import pytest
+            pytest.fail("Symbols list is None")
         
         print(f"\n✅ Received {len(symbols)} symbols")
         
@@ -279,14 +286,17 @@ def test_document_symbols():
         print(f"Test Results: {tests_passed}/{tests_total} passed ({100*tests_passed//tests_total if tests_total > 0 else 0}%)")
         print("="*60)
         
-        return tests_passed == tests_total
+        assert tests_passed == tests_total, f"Only {tests_passed}/{tests_total} tests passed"
         
     except Exception as e:
         print(f"\n❌ Test failed with exception: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 if __name__ == "__main__":
-    success = test_document_symbols()
-    sys.exit(0 if success else 1)
+    try:
+        test_document_symbols()
+        sys.exit(0)
+    except:
+        sys.exit(1)
