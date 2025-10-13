@@ -90,7 +90,15 @@ def test_master_file():
         # Give server time to process
         time.sleep(0.5)
         
-        # 4. Check stderr logs for confirmation
+        # 4. Terminate process and check stderr logs
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        
+        # Read stderr after process has terminated
         stderr_output = proc.stderr.read()
         if "Master file set to: file:///test/main.jazz" in stderr_output:
             print("✓ Master file successfully set")
@@ -100,9 +108,18 @@ def test_master_file():
             print(f"Stderr: {stderr_output}")
             return False
             
+    except Exception as e:
+        print(f"Error during test: {e}")
+        return False
     finally:
-        proc.terminate()
-        proc.wait(timeout=1)
+        # Ensure process is cleaned up
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
 
 if __name__ == "__main__":
     print("Testing master file feature...")

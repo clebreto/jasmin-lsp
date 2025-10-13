@@ -6,8 +6,8 @@ import json
 import sys
 from pathlib import Path
 
-# Path to LSP server
-LSP_SERVER = Path(__file__).parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
+# Path to LSP server (go up to project root, then to _build)
+LSP_SERVER = Path(__file__).parent.parent.parent / "_build/default/jasmin-lsp/jasmin_lsp.exe"
 
 # Test file content
 TEST_FILE_CONTENT = """fn test(reg u64 x, reg u32 y) -> reg u64 {

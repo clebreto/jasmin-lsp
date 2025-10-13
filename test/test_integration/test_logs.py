@@ -17,7 +17,8 @@ def test_with_logs():
     """Test and capture all logs."""
     server_path = "./_build/default/jasmin-lsp/jasmin_lsp.exe"
     
-    test_file = Path(__file__).parent / "test/fixtures/constant_computation/constants.jinc"
+    # Get the correct path to fixtures directory (go up two levels from test/test_integration/)
+    test_file = Path(__file__).parent.parent / "fixtures/constant_computation/constants.jinc"
     test_file_path = str(test_file.absolute())
     
     with open(test_file_path, 'r') as f:
