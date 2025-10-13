@@ -491,6 +491,7 @@ let rec extract_symbols_from_node uri source node acc =
       ) acc var_infos
       
   | "parameter" | "formal_arg" ->
+      (* Parameters inside function signatures should not have their own documentation *)
       (match extract_parameter_info node source with
       | Some (name, detail) ->
           {
@@ -500,11 +501,12 @@ let rec extract_symbols_from_node uri source node acc =
             definition_range = range;
             uri;
             detail;
-            documentation = doc;
+            documentation = None;  (* Parameters don't have individual documentation *)
           } :: acc
       | None -> acc)
       
   | "param_decl" ->
+      (* Parameters inside function signatures should not have their own documentation *)
       let param_infos = extract_param_decl_info node source in
       List.fold_left (fun acc (name, detail, param_range) ->
         {
@@ -514,7 +516,7 @@ let rec extract_symbols_from_node uri source node acc =
           definition_range = param_range;
           uri;
           detail;
-          documentation = doc;
+          documentation = None;  (* Parameters don't have individual documentation *)
         } :: acc
       ) acc param_infos
   

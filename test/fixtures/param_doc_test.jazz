@@ -1,0 +1,25 @@
+// Test file to verify parameters don't get wrong documentation
+
+/* This is the comment for _caddq function */
+inline fn _caddq(reg u32 x) -> reg u32 {
+  reg u32 result;
+  result = x + 10;
+  return result;
+}
+
+// This function has no documentation comment
+fn _cddq(reg u32 a) -> reg u32 {
+  reg u32 result;
+  result = a * 2;
+  return result;
+}
+
+/* Documentation for main_function
+   This function demonstrates that parameters should not
+   inherit documentation from nearby functions. */
+fn main_function(reg u32 value, reg u32 other) -> reg u32 {
+  reg u32 result;
+  result = _caddq(value);
+  result = _cddq(result);
+  return result;
+}
