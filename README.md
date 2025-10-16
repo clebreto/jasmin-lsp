@@ -166,14 +166,6 @@ See [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md) for detailed test implement
 
 The LSP server now automatically writes logs to a file for easier debugging:
 
-**View the latest log:**
-```bash
-./view-log.sh              # Open in pager (less)
-./view-log.sh -f           # Follow in real-time (tail -f)
-./view-log.sh -n 50        # Show last 50 lines
-./view-log.sh -g "Error"   # Search for pattern
-```
-
 **Log file location:** `~/.jasmin-lsp/jasmin-lsp-YYYYMMDD-HHMMSS.log`
 
 See [dev_doc/FILE_LOGGING.md](dev_doc/FILE_LOGGING.md) for complete logging documentation.

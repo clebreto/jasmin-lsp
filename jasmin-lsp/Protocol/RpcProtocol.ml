@@ -186,7 +186,47 @@ let receive_rpc_notification (notif : Jsonrpc.Notification.t) =
       | None ->
           Io.Logger.log "jasmin/setMasterFile notification missing params";
           []
-    ) else (
+    ) 
+    (* Handle custom jasmin/setNamespacePaths notification *)
+    else if method_name = "jasmin/setNamespacePaths" then (
+      Io.Logger.log "Received jasmin/setNamespacePaths notification";
+      match notif.params with
+      | Some params ->
+          (try
+            (* Parse the paths from the params *)
+            let paths = match params with
+            | `Assoc fields ->
+                (match List.assoc_opt "paths" fields with
+                | Some (`List path_list) ->
+                    List.filter_map (fun path_json ->
+                      match path_json with
+                      | `Assoc path_fields ->
+                          let namespace = match List.assoc_opt "namespace" path_fields with
+                          | Some (`String s) -> Some s
+                          | _ -> None
+                          in
+                          let path = match List.assoc_opt "path" path_fields with
+                          | Some (`String s) -> Some s
+                          | _ -> None
+                          in
+                          (match namespace, path with
+                          | Some ns, Some p -> Some { ServerState.namespace = ns; path = p }
+                          | _ -> None)
+                      | _ -> None
+                    ) path_list
+                | _ -> [])
+            | _ -> []
+            in
+            LspProtocol.receive_set_namespace_paths_notification paths
+          with e ->
+            Io.Logger.log (Format.asprintf "Error processing jasmin/setNamespacePaths: %s" 
+              (Printexc.to_string e));
+            [])
+      | None ->
+          Io.Logger.log "jasmin/setNamespacePaths notification missing params";
+          []
+    )
+    else (
       (* Standard LSP notification *)
       let lsp_notif = Lsp.Client_notification.of_jsonrpc notif in
       match lsp_notif with

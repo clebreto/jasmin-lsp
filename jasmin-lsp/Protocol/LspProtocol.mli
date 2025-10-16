@@ -6,3 +6,6 @@ val receive_lsp_notification :
 
 val receive_set_master_file_notification :
   Lsp.Types.DocumentUri.t -> (Priority.t * RpcProtocolEvent.t) list
+
+val receive_set_namespace_paths_notification :
+  ServerState.namespace_path list -> (Priority.t * RpcProtocolEvent.t) list

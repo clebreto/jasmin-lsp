@@ -962,22 +962,57 @@ let rec receive_lsp_notification (notif : Lsp.Client_notification.t) =
       events
   | _ -> []
 
-(** Send diagnostics for a document *)
-and send_diagnostics uri =
+(** Send diagnostics for a single document *)
+and send_diagnostics_single uri =
   try
     match Document.DocumentStore.get_tree (!server_state).document_store uri with
     | None -> 
-        Io.Logger.log "No tree available for diagnostics";
+        Io.Logger.log (Format.asprintf "No tree available for diagnostics: %s" 
+          (Lsp.Types.DocumentUri.to_string uri));
         []
     | Some tree ->
         let source = Document.DocumentStore.get_text (!server_state).document_store uri |> Option.value ~default:"" in
         let diagnostics = collect_diagnostics tree source in
-        Io.Logger.log (Format.asprintf "Collected %d diagnostics" (List.length diagnostics));
+        Io.Logger.log (Format.asprintf "Collected %d diagnostics for %s" 
+          (List.length diagnostics) (Lsp.Types.DocumentUri.to_string uri));
         let params = Lsp.Types.PublishDiagnosticsParams.create ~uri ~diagnostics () in
         let notification = Lsp.Server_notification.PublishDiagnostics params in
         let json = Lsp.Server_notification.to_jsonrpc notification in
         let packet_json = Jsonrpc.Notification.yojson_of_t json in
         [(Priority.High, Send packet_json)]
+  with e ->
+    Io.Logger.log (Format.asprintf "Exception in send_diagnostics_single: %s\n%s" 
+      (Printexc.to_string e) 
+      (Printexc.get_backtrace ()));
+    []
+
+(** Send diagnostics for a document and all its dependencies *)
+and send_diagnostics uri =
+  try
+    Io.Logger.log (Format.asprintf "Sending diagnostics for %s and its dependencies" 
+      (Lsp.Types.DocumentUri.to_string uri));
+    
+    (* Get all relevant files (including dependencies) *)
+    let all_files = get_all_relevant_files uri in
+    
+    (* Filter to only open files - don't load from disk as it's expensive and can cause issues *)
+    let open_files = List.filter (fun file_uri ->
+      Document.DocumentStore.is_open (!server_state).document_store file_uri
+    ) all_files in
+    
+    Io.Logger.log (Format.asprintf "Will send diagnostics for %d open files (out of %d total)" 
+      (List.length open_files) (List.length all_files));
+    
+    (* Send diagnostics for each open file *)
+    let events = List.concat_map (fun file_uri ->
+      Io.Logger.log (Format.asprintf "  - %s" 
+        (Lsp.Types.DocumentUri.to_string file_uri));
+      send_diagnostics_single file_uri
+    ) open_files in
+    
+    Io.Logger.log (Format.asprintf "Sent diagnostics for %d files" 
+      (List.length open_files));
+    events
   with e ->
     Io.Logger.log (Format.asprintf "Exception in send_diagnostics: %s\n%s" 
       (Printexc.to_string e) 
@@ -1084,6 +1119,56 @@ and collect_diagnostics tree source =
   with e ->
     Io.Logger.log (Format.asprintf "Exception in collect_diagnostics: %s" (Printexc.to_string e));
     []
+
+(** Handle custom jasmin/setNamespacePaths notification *)
+let receive_set_namespace_paths_notification paths =
+  Io.Logger.log (Format.asprintf "Setting namespace paths: %d namespaces" (List.length paths));
+  ServerState.set_namespace_paths (!server_state) paths;
+  
+  (* If a master file is set, load it and its dependencies, then trigger diagnostics *)
+  match ServerState.get_master_file (!server_state) with
+  | Some master_uri ->
+      Io.Logger.log "Master file is set, loading files and triggering diagnostics";
+      
+      (* Load master file if not already open *)
+      let load_file uri =
+        if not (Document.DocumentStore.is_open (!server_state).document_store uri) then (
+          try
+            let path = Lsp.Uri.to_path uri in
+            if Sys.file_exists path then (
+              Io.Logger.log (Format.asprintf "Loading file: %s" path);
+              let ic = open_in path in
+              let len = in_channel_length ic in
+              let content = really_input_string ic len in
+              close_in ic;
+              Document.DocumentStore.open_document (!server_state).document_store uri content 0;
+              true
+            ) else (
+              Io.Logger.log (Format.asprintf "File does not exist: %s" path);
+              false
+            )
+          with e ->
+            Io.Logger.log (Format.asprintf "Error loading file: %s" (Printexc.to_string e));
+            false
+        ) else (
+          Io.Logger.log (Format.asprintf "File already open: %s" (Lsp.Types.DocumentUri.to_string uri));
+          true
+        )
+      in
+      
+      (* Load master file *)
+      let _ = load_file master_uri in
+      
+      (* Get all dependencies and load them *)
+      let all_files = get_all_relevant_files master_uri in
+      Io.Logger.log (Format.asprintf "Found %d files to load" (List.length all_files));
+      List.iter (fun uri -> ignore (load_file uri)) all_files;
+      
+      (* Now send diagnostics *)
+      send_diagnostics master_uri
+  | None ->
+      Io.Logger.log "No master file set, skipping diagnostics";
+      []
 
 
 (*
