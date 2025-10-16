@@ -64,8 +64,9 @@ let update_document store uri text version =
           (Lsp.Types.DocumentUri.to_string uri));
         open_document store uri text version
     | Some old_doc ->
-        (* Parse with old tree for incremental updates *)
-        let new_tree = parse_document store.parser text old_doc.tree in
+        (* Force full re-parse instead of incremental parsing *)
+        (* Incremental parsing (using old_doc.tree) can miss errors *)
+        let new_tree = parse_document store.parser text None in
         let doc = { uri; text; version; tree = new_tree } in
         (* Update the document in store *)
         store.documents <- (uri, doc) :: (List.remove_assoc uri store.documents);

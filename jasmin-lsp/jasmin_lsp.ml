@@ -75,7 +75,40 @@ end
 module BasicServer = Make(RpcHandler)
 
 let () =
-  Io.Logger.log (Format.asprintf "%s language server (Lwt loop) started\n\n" Config.name);
+  (* Initialize file logging *)
+  let log_dir = 
+    try
+      let home = Sys.getenv "HOME" in
+      Filename.concat home ".jasmin-lsp"
+    with Not_found ->
+      "/tmp/jasmin-lsp"
+  in
+  (* Create log directory if it doesn't exist *)
+  (try
+    if not (Sys.file_exists log_dir) then
+      Unix.mkdir log_dir 0o755
+  with _ -> ());
+  
+  let timestamp = Unix.time () |> Unix.gmtime in
+  let log_filename = Printf.sprintf "jasmin-lsp-%04d%02d%02d-%02d%02d%02d.log"
+    (timestamp.tm_year + 1900)
+    (timestamp.tm_mon + 1)
+    timestamp.tm_mday
+    timestamp.tm_hour
+    timestamp.tm_min
+    timestamp.tm_sec
+  in
+  let log_path = Filename.concat log_dir log_filename in
+  Io.Logger.init_file_logging log_path;
+  
+  (* Set up cleanup handler to close log file on exit *)
+  at_exit (fun () ->
+    Io.Logger.close_file_logging ()
+  );
+  
+  Io.Logger.log (Format.asprintf "%s language server (Lwt loop) started" Config.name);
+  Io.Logger.log (Format.asprintf "Log file: %s" log_path);
+  
   Lwt_main.run (
     BasicServer.server_loop BasicServer.EventHeap.empty None
   )

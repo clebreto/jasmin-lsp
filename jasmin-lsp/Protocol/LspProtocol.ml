@@ -745,9 +745,16 @@ let receive_text_document_document_symbol_request (params : Lsp.Types.DocumentSy
   match Document.DocumentStore.get_tree (!server_state).document_store uri,
         Document.DocumentStore.get_text (!server_state).document_store uri with
   | Some tree, Some source ->
-      let symbols = Document.SymbolTable.extract_symbols uri source tree in
-      let document_symbols = List.map Document.SymbolTable.symbol_to_document_symbol symbols in
-      Ok (Some (`DocumentSymbol document_symbols)), []
+      (try
+        let symbols = Document.SymbolTable.extract_symbols uri source tree in
+        let document_symbols = List.map Document.SymbolTable.symbol_to_document_symbol symbols in
+        Ok (Some (`DocumentSymbol document_symbols)), []
+      with e ->
+        Io.Logger.log (Format.asprintf "Error extracting symbols: %s\n%s"
+          (Printexc.to_string e)
+          (Printexc.get_backtrace ()));
+        (* Return empty symbols list instead of erroring *)
+        Ok (Some (`DocumentSymbol [])), [])
   | _ -> Error "Document not open or not parsed", []
 
 (** Handle workspace symbol request *)
@@ -892,6 +899,67 @@ let rec receive_lsp_notification (notif : Lsp.Client_notification.t) =
       let uri = params.textDocument.uri in
       Document.DocumentStore.close_document (!server_state).document_store uri;
       []
+  | Lsp.Client_notification.DidChangeWatchedFiles params ->
+      (* Handle external file changes *)
+      Io.Logger.log (Format.asprintf "Watched files changed: %d files" 
+        (List.length params.changes));
+      (* Send diagnostics for all changed files (both open and closed) *)
+      let events = List.concat_map (fun (change : Lsp.Types.FileEvent.t) ->
+        let uri = change.uri in
+        let change_type = match change.type_ with
+          | Lsp.Types.FileChangeType.Created -> "Created"
+          | Lsp.Types.FileChangeType.Changed -> "Changed"
+          | Lsp.Types.FileChangeType.Deleted -> "Deleted"
+        in
+        Io.Logger.log (Format.asprintf "File %s: %s" 
+          change_type (Lsp.Types.DocumentUri.to_string uri));
+        
+        (* For deleted files, clear diagnostics *)
+        (match change.type_ with
+        | Lsp.Types.FileChangeType.Deleted ->
+          Io.Logger.log (Format.asprintf "Clearing diagnostics for deleted file: %s" 
+            (Lsp.Types.DocumentUri.to_string uri));
+          let params = Lsp.Types.PublishDiagnosticsParams.create ~uri ~diagnostics:[] () in
+          let notification = Lsp.Server_notification.PublishDiagnostics params in
+          let json = Lsp.Server_notification.to_jsonrpc notification in
+          let packet_json = Jsonrpc.Notification.yojson_of_t json in
+          [(Priority.High, Send packet_json)]
+        (* For created or changed files, send diagnostics *)
+        | Lsp.Types.FileChangeType.Created | Lsp.Types.FileChangeType.Changed ->
+          match Document.DocumentStore.get_document (!server_state).document_store uri with
+          | Some _ ->
+              (* File is open in editor, reload and re-send diagnostics *)
+              Io.Logger.log (Format.asprintf "File is open, reloading from disk: %s" 
+                (Lsp.Types.DocumentUri.to_string uri));
+              (try
+                let path = Lsp.Uri.to_path uri in
+                if Sys.file_exists path then (
+                  let ic = open_in path in
+                  let len = in_channel_length ic in
+                  let content = really_input_string ic len in
+                  close_in ic;
+                  (* Update the document store with disk content *)
+                  let version = match Document.DocumentStore.get_document (!server_state).document_store uri with
+                    | Some doc -> doc.version + 1
+                    | None -> 0
+                  in
+                  Document.DocumentStore.update_document (!server_state).document_store uri content version;
+                  send_diagnostics uri
+                ) else (
+                  Io.Logger.log (Format.asprintf "File does not exist: %s" path);
+                  []
+                )
+              with e ->
+                Io.Logger.log (Format.asprintf "Error reloading file: %s" (Printexc.to_string e));
+                [])
+          | None ->
+              (* File is not open, load from disk and send diagnostics *)
+              Io.Logger.log (Format.asprintf "File not open, loading from disk for diagnostics: %s" 
+                (Lsp.Types.DocumentUri.to_string uri));
+              send_diagnostics_for_disk_file uri
+        )
+      ) params.changes in
+      events
   | _ -> []
 
 (** Send diagnostics for a document *)
@@ -916,20 +984,63 @@ and send_diagnostics uri =
       (Printexc.get_backtrace ()));
     []
 
+(** Send diagnostics for a file loaded from disk (not in document store) *)
+and send_diagnostics_for_disk_file uri =
+  try
+    let path = Lsp.Uri.to_path uri in
+    if not (Sys.file_exists path) then (
+      Io.Logger.log (Format.asprintf "File does not exist: %s" path);
+      []
+    ) else (
+      Io.Logger.log (Format.asprintf "Loading file from disk: %s" path);
+      let ic = open_in path in
+      let len = in_channel_length ic in
+      let content = really_input_string ic len in
+      close_in ic;
+      
+      (* Parse the file *)
+      let parser = Document.DocumentStore.get_parser () in
+      match TreeSitter.parser_parse_string parser content with
+      | None ->
+          Io.Logger.log "Failed to parse file";
+          []
+      | Some tree ->
+          let diagnostics = collect_diagnostics tree content in
+          Io.Logger.log (Format.asprintf "Collected %d diagnostics from disk file" (List.length diagnostics));
+          let params = Lsp.Types.PublishDiagnosticsParams.create ~uri ~diagnostics () in
+          let notification = Lsp.Server_notification.PublishDiagnostics params in
+          let json = Lsp.Server_notification.to_jsonrpc notification in
+          let packet_json = Jsonrpc.Notification.yojson_of_t json in
+          [(Priority.High, Send packet_json)]
+    )
+  with e ->
+    Io.Logger.log (Format.asprintf "Exception in send_diagnostics_for_disk_file: %s\n%s" 
+      (Printexc.to_string e) 
+      (Printexc.get_backtrace ()));
+    []
+
 (** Collect diagnostics from syntax tree *)
 and collect_diagnostics tree source =
   try
     let root = TreeSitter.tree_root_node tree in
     let errors = ref [] in
+    let nodes_visited = ref 0 in
     
     let rec visit_node node =
       try
+        incr nodes_visited;
         (* Check if this node is an error node *)
         let node_type_str = TreeSitter.node_type node in
         let is_error = TreeSitter.node_is_error node in
         let is_missing = TreeSitter.node_is_missing node in
         
-        if is_error || is_missing then begin
+        (* Log every node type to debug *)
+        if node_type_str = "ERROR" then
+          Io.Logger.log (Format.asprintf "Found ERROR node type: type=%s, is_error=%b, is_missing=%b" 
+            node_type_str is_error is_missing);
+        
+        (* Check both is_error function and "ERROR" node type *)
+        if is_error || is_missing || node_type_str = "ERROR" then begin
           Io.Logger.log (Format.asprintf "Found error node: type=%s, is_error=%b, is_missing=%b" 
             node_type_str is_error is_missing);
           let range = TreeSitter.node_range node in
@@ -949,12 +1060,12 @@ and collect_diagnostics tree source =
           errors := diagnostic :: !errors
         end;
         
-        (* Visit all children to find nested errors *)
-        let child_count = TreeSitter.node_named_child_count node in
+        (* Visit all children to find nested errors - use ALL children, not just named ones *)
+        let child_count = TreeSitter.node_child_count node in
         let rec visit_children i =
           if i < child_count then begin
             try
-              match TreeSitter.node_named_child node i with
+              match TreeSitter.node_child node i with
               | Some child -> visit_node child; visit_children (i + 1)
               | None -> visit_children (i + 1)
             with e ->
@@ -968,6 +1079,7 @@ and collect_diagnostics tree source =
     in
     
     visit_node root;
+    Io.Logger.log (Format.asprintf "Visited %d nodes, found %d errors" !nodes_visited (List.length !errors));
     List.rev !errors
   with e ->
     Io.Logger.log (Format.asprintf "Exception in collect_diagnostics: %s" (Printexc.to_string e));

@@ -72,7 +72,6 @@ let capabilities: Lsp.Types.ServerCapabilities.t =
     ~openClose:true  (* This is crucial for didOpen/didClose notifications *)
     ~change:(TextDocumentSyncKind.Full)
     ()) in
-  let completionProvider = CompletionOptions.create () in
   let hoverProvider = `Bool true in
   let definitionProvider = `Bool true in
   let referencesProvider = `Bool true in
@@ -84,7 +83,6 @@ let capabilities: Lsp.Types.ServerCapabilities.t =
   let workspace = ServerCapabilities.create_workspace ~fileOperations () in
   Lsp.Types.ServerCapabilities.create
     ~textDocumentSync 
-    ~completionProvider 
     ~hoverProvider 
     ~definitionProvider 
     ~referencesProvider

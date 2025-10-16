@@ -454,14 +454,20 @@ let extract_param_decl_info node source =
 
 (** Recursively extract symbols from a node *)
 let rec extract_symbols_from_node uri source node acc =
-  let node_type = TreeSitter.node_type node in
-  let range = TreeSitter.node_range node in
-  
-  (* Extract documentation comment for this node *)
-  let doc = extract_doc_comment source node in
-  
-  (* Extract symbol(s) based on node type *)
-  let acc = match node_type with
+  try
+    let node_type = TreeSitter.node_type node in
+    
+    (* Skip ERROR nodes to avoid crashes *)
+    if node_type = "ERROR" then
+      acc
+    else
+      let range = TreeSitter.node_range node in
+      
+      (* Extract documentation comment for this node *)
+      let doc = extract_doc_comment source node in
+      
+      (* Extract symbol(s) based on node type *)
+      let acc = match node_type with
   | "function_definition" ->
       (match extract_function_info node source with
       | Some (name, detail) ->
@@ -601,6 +607,10 @@ let rec extract_symbols_from_node uri source node acc =
       | Some child -> process_children (i + 1) (extract_symbols_from_node uri source child acc)
   in
   process_children 0 acc
+  with e ->
+    (* Log error but continue processing - don't let one bad node break everything *)
+    Io.Logger.log (Format.asprintf "Error processing node (skipping): %s" (Printexc.to_string e));
+    acc
 
 let extract_symbols uri source tree =
   let root = TreeSitter.tree_root_node tree in
