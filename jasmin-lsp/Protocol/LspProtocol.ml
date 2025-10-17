@@ -897,8 +897,39 @@ let rec receive_lsp_notification (notif : Lsp.Client_notification.t) =
           send_diagnostics uri)
   | Lsp.Client_notification.TextDocumentDidClose params ->
       let uri = params.textDocument.uri in
-      Document.DocumentStore.close_document (!server_state).document_store uri;
-      []
+      Io.Logger.log (Format.asprintf "Closing document: %s" 
+        (Lsp.Types.DocumentUri.to_string uri));
+      
+      (* Check if this file is in the master file dependency tree *)
+      let in_dependency_tree = 
+        match ServerState.get_master_file (!server_state) with
+        | Some master_uri ->
+            let all_files = collect_required_files_recursive master_uri [] in
+            List.mem uri all_files || uri = master_uri
+        | None ->
+            (* No master file, so files should be removed when closed *)
+            false
+      in
+      
+      (* If the file is in the dependency tree, keep it in the document store
+         and re-send its diagnostics to ensure they stay visible *)
+      if in_dependency_tree then (
+        Io.Logger.log (Format.asprintf "File is in dependency tree, keeping in memory and diagnostics: %s" 
+          (Lsp.Types.DocumentUri.to_string uri));
+        (* Don't close the document - keep it loaded *)
+        (* Re-send diagnostics to ensure they remain visible in Problems panel *)
+        send_diagnostics_single uri
+      ) else (
+        Io.Logger.log (Format.asprintf "File not in dependency tree, closing and clearing diagnostics: %s" 
+          (Lsp.Types.DocumentUri.to_string uri));
+        Document.DocumentStore.close_document (!server_state).document_store uri;
+        (* Clear diagnostics for files not in dependency tree *)
+        let params = Lsp.Types.PublishDiagnosticsParams.create ~uri ~diagnostics:[] () in
+        let notification = Lsp.Server_notification.PublishDiagnostics params in
+        let json = Lsp.Server_notification.to_jsonrpc notification in
+        let packet_json = Jsonrpc.Notification.yojson_of_t json in
+        [(Priority.High, Send packet_json)]
+      )
   | Lsp.Client_notification.DidChangeWatchedFiles params ->
       (* Handle external file changes *)
       Io.Logger.log (Format.asprintf "Watched files changed: %d files" 
@@ -986,22 +1017,30 @@ and send_diagnostics_single uri =
       (Printexc.get_backtrace ()));
     []
 
-(** Send diagnostics for a document and all its dependencies *)
+(** Send diagnostics for a document and all its dependencies, plus all open buffers *)
 and send_diagnostics uri =
   try
     Io.Logger.log (Format.asprintf "Sending diagnostics for %s and its dependencies" 
       (Lsp.Types.DocumentUri.to_string uri));
     
-    (* Get all relevant files (including dependencies) *)
-    let all_files = get_all_relevant_files uri in
+    (* Get all relevant files from dependency tree *)
+    let dep_tree_files = get_all_relevant_files uri in
     
-    (* Filter to only open files - don't load from disk as it's expensive and can cause issues *)
+    (* Get all open files *)
+    let all_open_files = Document.DocumentStore.get_all_uris (!server_state).document_store in
+    
+    (* Combine: dependency tree files + all open files (remove duplicates) *)
+    let files_to_diagnose = List.fold_left (fun acc file_uri ->
+      if List.mem file_uri acc then acc else file_uri :: acc
+    ) dep_tree_files all_open_files in
+    
+    (* Filter to only files that are actually open *)
     let open_files = List.filter (fun file_uri ->
       Document.DocumentStore.is_open (!server_state).document_store file_uri
-    ) all_files in
+    ) files_to_diagnose in
     
-    Io.Logger.log (Format.asprintf "Will send diagnostics for %d open files (out of %d total)" 
-      (List.length open_files) (List.length all_files));
+    Io.Logger.log (Format.asprintf "Will send diagnostics for %d open files (%d from dep tree, %d total open)" 
+      (List.length open_files) (List.length dep_tree_files) (List.length all_open_files));
     
     (* Send diagnostics for each open file *)
     let events = List.concat_map (fun file_uri ->

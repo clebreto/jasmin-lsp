@@ -9,10 +9,11 @@ All tree-sitter integration issues have been resolved! The language server is pr
 ## Features
 
 ✅ **Tree-Sitter Parsing** - Fast, incremental syntax analysis  
-✅ **Syntax Diagnostics** - Real-time error detection  
+✅ **Syntax Diagnostics** - Real-time error detection with intelligent cleanup  
 ✅ **Go to Definition** - Navigate to function, variable, parameter, and global definitions  
 ✅ **Cross-File Navigation** - Jump to definitions across `require`d files  
 ✅ **Master File Support** - Proper symbol resolution using compilation entry point  
+✅ **Smart Diagnostics Cleanup** - Clears diagnostics when closing files outside dependency tree  
 ✅ **Find All References** - Locate all usages of a symbol  
 ✅ **Hover Information** - Show type information, signatures, and keyword documentation  
 ✅ **Document Symbols** - Outline view of current file  
@@ -91,6 +92,25 @@ _build/default/jasmin-lsp/jasmin_lsp.exe
    ```
 
 **Note**: The `jasmin.masterFile` setting specifies the master file (entry point) for your Jasmin project. This is important for proper symbol resolution across `require`d files. A status bar item will show the current master file when editing `.jazz` or `.jinc` files, and you can click it to change the master file. See [MASTER_FILE_FEATURE.md](MASTER_FILE_FEATURE.md) for details.
+
+### Diagnostics Behavior
+
+The LSP server intelligently manages diagnostics based on the master file dependency tree:
+
+- **All open buffers** receive diagnostics, regardless of dependency relationships
+- **Files in the dependency tree** are kept in memory when closed and their diagnostics remain visible
+- **Files NOT in the dependency tree** are removed from memory and have diagnostics cleared when closed
+- This keeps the Problems panel clean while ensuring critical project files remain monitored
+
+Example:
+```
+main.jazz → module.jinc → utils.jinc  (dependency tree)
+unrelated.jinc                         (not in tree)
+```
+- Close `utils.jinc` (in tree): kept in memory, diagnostics remain visible ✓
+- Close `unrelated.jinc` (not in tree): removed from memory, diagnostics cleared ✓
+
+See [dev_doc/CLOSE_BUFFER_DIAGNOSTICS.md](dev_doc/CLOSE_BUFFER_DIAGNOSTICS.md) for implementation details.
 
 ### Other IDEs
 

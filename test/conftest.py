@@ -360,6 +360,63 @@ class LSPClient:
     def is_alive(self) -> bool:
         """Check if the server process is still running."""
         return self.process is not None and self.process.poll() is None
+    
+    def collect_diagnostics(self, timeout: float = 1.0) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Collect diagnostic notifications from the server.
+        
+        Args:
+            timeout: Maximum time to wait for diagnostics
+            
+        Returns:
+            Dictionary mapping URIs to lists of diagnostics
+        """
+        import select
+        
+        diagnostics_by_uri = {}
+        end_time = time.time() + timeout
+        attempts = 0
+        
+        while time.time() < end_time:
+            remaining = end_time - time.time()
+            if remaining <= 0:
+                break
+            
+            try:
+                # Check if there's data available
+                ready, _, _ = select.select([self.process.stdout], [], [], 0.1)
+                if ready:
+                    resp = self.read_response(timeout=0.1)
+                    if resp:
+                        if resp.get('method') == 'textDocument/publishDiagnostics':
+                            uri = resp['params']['uri']
+                            diagnostics = resp['params']['diagnostics']
+                            diagnostics_by_uri[uri] = diagnostics
+                        attempts = 0  # Reset attempts if we got something
+                    else:
+                        attempts += 1
+                else:
+                    attempts += 1
+                
+                # If no data for a while, stop waiting
+                if attempts > 5:
+                    break
+                    
+                time.sleep(0.05)
+            except Exception:
+                attempts += 1
+                time.sleep(0.05)
+        
+        return diagnostics_by_uri
+    
+    def set_master_file(self, uri: str):
+        """
+        Set the master file for the workspace.
+        
+        Args:
+            uri: The URI of the master file
+        """
+        self.send_notification("jasmin/setMasterFile", {"uri": uri})
 
 
 # Pytest Fixtures
