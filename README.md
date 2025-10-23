@@ -1,5 +1,7 @@
 # jasmin-lsp
 
+![CI](https://github.com/jasmin-lang/jasmin-lsp/workflows/CI/badge.svg)
+
 A Language Server Protocol (LSP) implementation for the Jasmin programming language, featuring **tree-sitter-based parsing** for fast, accurate syntax analysis.
 
 ## ✅ Status: FULLY OPERATIONAL
@@ -146,6 +148,17 @@ jasmin-lsp/
 ```
 
 ## Development
+
+### Continuous Integration
+
+The project uses GitHub Actions for automated building and testing on Linux AMD64:
+
+- **Automated Builds**: Triggered on push to `main`/`master` branches and pull requests
+- **Test Suite**: Full pytest suite runs on every commit
+- **Build Artifacts**: Linux AMD64 binaries available for download from workflow runs
+- **Caching**: Opam dependencies and dune cache for faster builds
+
+See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the complete CI configuration.
 
 ### Testing
 
