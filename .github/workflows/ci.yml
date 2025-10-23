@@ -52,8 +52,7 @@ jobs:
             libgmp-dev \
             libmpfr-dev \
             libppl-dev \
-            pkg-config \
-            tree-sitter-cli
+            pkg-config
       
       - name: Install tree-sitter library
         run: |
