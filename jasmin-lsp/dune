@@ -1,20 +1,22 @@
 (rule
- (targets libtree-sitter-jasmin.a libtree-sitter-jasmin.so)
+ (targets libtree-sitter-jasmin.a)
+ (deps (source_tree %{project_root}/tree-sitter-jasmin))
+ (action
+  (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.a libtree-sitter-jasmin.a)))
+
+(rule
+ (targets libtree-sitter-jasmin.so)
  (deps (source_tree %{project_root}/tree-sitter-jasmin))
  (enabled_if (= %{system} linux))
  (action
-  (progn
-   (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.a libtree-sitter-jasmin.a)
-   (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.so libtree-sitter-jasmin.so))))
+  (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.so libtree-sitter-jasmin.so)))
 
 (rule
- (targets libtree-sitter-jasmin.a libtree-sitter-jasmin.dylib)
+ (targets libtree-sitter-jasmin.dylib)
  (deps (source_tree %{project_root}/tree-sitter-jasmin))
  (enabled_if (= %{system} macosx))
  (action
-  (progn
-   (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.a libtree-sitter-jasmin.a)
-   (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.dylib libtree-sitter-jasmin.dylib))))
+  (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.dylib libtree-sitter-jasmin.dylib)))
 
 (executable
  (name jasmin_lsp)
