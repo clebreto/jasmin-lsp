@@ -4,20 +4,6 @@
  (action
   (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.a libtree-sitter-jasmin.a)))
 
-(rule
- (targets libtree-sitter-jasmin.so)
- (deps (source_tree %{project_root}/tree-sitter-jasmin))
- (enabled_if (= %{system} linux))
- (action
-  (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.so libtree-sitter-jasmin.so)))
-
-(rule
- (targets libtree-sitter-jasmin.dylib)
- (deps (source_tree %{project_root}/tree-sitter-jasmin))
- (enabled_if (= %{system} macosx))
- (action
-  (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.dylib libtree-sitter-jasmin.dylib)))
-
 (executable
  (name jasmin_lsp)
  (public_name jasmin-lsp)
@@ -26,8 +12,7 @@
    -cclib -Ljasmin-lsp
    -cclib -ltree-sitter
    -cclib -ltree-sitter-jasmin
-   -cclib -Wl,-rpath,%{env:CONDA_PREFIX=/usr/local}/lib
-   -cclib -Wl,-rpath,@loader_path))
+   -cclib -Wl,-rpath,%{env:CONDA_PREFIX=/usr/local}/lib))
  (foreign_stubs
   (language c)
   (names tree_sitter_stubs)
