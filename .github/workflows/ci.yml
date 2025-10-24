@@ -84,13 +84,16 @@ jobs:
       
       - name: Install OCaml dependencies
         run: |
-          # Temporarily rename dune-project to prevent interference with jasmin build
+          # Temporarily rename dune files to prevent interference with jasmin build
+          # but keep .opam file so opam can read dependencies
           mv dune-project dune-project.tmp
           mv dune-workspace dune-workspace.tmp || true
-          opam install . --deps-only --assume-depexts
+          opam install . --deps-only --assume-depexts --yes
           # Restore dune files
           mv dune-project.tmp dune-project
           mv dune-workspace.tmp dune-workspace || true
+          # Verify jasmin was installed
+          opam list jasmin
       
       - name: Build tree-sitter-jasmin
         run: |
