@@ -92,8 +92,11 @@ jobs:
           # Restore dune files
           mv dune-project.tmp dune-project
           mv dune-workspace.tmp dune-workspace || true
-          # Verify jasmin was installed
+          # Verify jasmin was installed and check what libraries it provides
           opam list jasmin
+          echo "Checking jasmin library files:"
+          find ~/.opam -name "*.cma" -o -name "*.cmxa" | grep jasmin || true
+          opam show jasmin --field=libraries || echo "No libraries field"
       
       - name: Build tree-sitter-jasmin
         run: |
