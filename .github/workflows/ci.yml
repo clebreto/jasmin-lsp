@@ -82,6 +82,10 @@ jobs:
           restore-keys: |
             opam-${{ runner.os }}-${{ env.OCAML_VERSION }}-
       
+      - name: Pin jasmin to working version
+        run: |
+          opam pin add jasmin 2025.04.0 --no-action -y
+      
       - name: Install OCaml dependencies
         run: |
           opam install . --deps-only --assume-depexts
