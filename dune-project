@@ -9,4 +9,4 @@
 (package
  (name jasmin-lsp)
  (synopsis "Jasmin Language Server Protocol (LSP) implementation")
- (depends (ocaml (>= 5.3.0)) lwt yojson lsp ppx_yojson_conv lwt_ppx cmdliner batteries jasmin))
+ (depends (ocaml (>= 5.3.0)) lwt yojson lsp ppx_yojson_conv lwt_ppx cmdliner batteries (jasmin (< 2025.06.0))))

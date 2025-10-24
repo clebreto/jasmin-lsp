@@ -1,10 +1,8 @@
 (rule
- (targets libtree-sitter-jasmin.a libtree-sitter-jasmin.dylib)
+ (targets libtree-sitter-jasmin.a)
  (deps (source_tree %{project_root}/tree-sitter-jasmin))
  (action
-  (progn
-   (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.a libtree-sitter-jasmin.a)
-   (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.dylib libtree-sitter-jasmin.dylib))))
+  (run cp %{project_root}/tree-sitter-jasmin/libtree-sitter-jasmin.a libtree-sitter-jasmin.a)))
 
 (executable
  (name jasmin_lsp)
@@ -14,8 +12,7 @@
    -cclib -Ljasmin-lsp
    -cclib -ltree-sitter
    -cclib -ltree-sitter-jasmin
-   -cclib -Wl,-rpath,%{env:CONDA_PREFIX=/usr/local}/lib
-   -cclib -Wl,-rpath,@loader_path))
+   -cclib -Wl,-rpath,%{env:CONDA_PREFIX=/usr/local}/lib))
  (foreign_stubs
   (language c)
   (names tree_sitter_stubs)
