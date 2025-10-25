@@ -7,8 +7,11 @@
 (executable
  (name jasmin_lsp)
  (public_name jasmin-lsp)
- (flags (:standard -w -27-32 -g))
- (c_library_flags (-ltree-sitter -ltree-sitter-jasmin))
+ (flags (:standard -w -27-32 -g
+   -cclib -L%{env:CONDA_PREFIX=/usr/local}/lib
+   -cclib -L%{project_root}/tree-sitter-jasmin
+   -cclib -ltree-sitter
+   -cclib -ltree-sitter-jasmin))
  (foreign_stubs
   (language c)
   (names tree_sitter_stubs)
