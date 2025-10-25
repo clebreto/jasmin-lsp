@@ -19,7 +19,7 @@
   (flags -I%{env:CONDA_PREFIX=/usr/local}/include
          -I%{project_root}/tree-sitter-jasmin/src
          -I%{project_root}/tree-sitter-jasmin/bindings/c))
- (libraries jasmin.jasmin lsp yojson lwt lwt.unix cmdliner batteries ppx_yojson_conv_lib)
+ (libraries lsp yojson lwt lwt.unix cmdliner batteries ppx_yojson_conv_lib)
  (preprocess
    (pps ppx_yojson_conv lwt_ppx)
  )

@@ -7,23 +7,17 @@ type namespace_path = {
 
 type t = {
   document_store: Document.DocumentStore.t;
-  prog: (unit, unit) Jasmin.Prog.prog option ref;
   master_file: Lsp.Types.DocumentUri.t option ref;
   namespace_paths: namespace_path list ref;
 }
 
 let create () = {
   document_store = Document.DocumentStore.create ();
-  prog = ref None;
   master_file = ref None;
   namespace_paths = ref [];
 }
 
 let get_document_store state = state.document_store
-
-let get_prog state = !(state.prog)
-
-let set_prog state prog = state.prog := Some prog
 
 let get_master_file state = !(state.master_file)
 

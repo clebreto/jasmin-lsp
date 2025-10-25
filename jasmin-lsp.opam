@@ -15,7 +15,6 @@ depends: [
   "lwt_ppx"
   "cmdliner"
   "batteries"
-  "jasmin" {< "2025.06.0"}
   "odoc" {with-doc}
 ]
 build: [

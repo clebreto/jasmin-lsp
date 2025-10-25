@@ -138,7 +138,7 @@ let write_json_rpc (json: Yojson.Safe.t) =
 Handlers for receiving each kind of JSON-RPC packet.
 These functions should call the appropriate LSP protocol functions see [LspProtocol.ml]
 *)
-let receive_rpc_request (req : Jsonrpc.Request.t) prog =
+let receive_rpc_request (req : Jsonrpc.Request.t) =
   try
     let id = req.id in
     let req = Lsp.Client_request.of_jsonrpc req in
@@ -146,7 +146,7 @@ let receive_rpc_request (req : Jsonrpc.Request.t) prog =
     | Error err ->
         Io.Logger.log (Format.asprintf "Failed to decode request: %s\n" err);
         []
-    | Ok req -> LspProtocol.receive_lsp_request id req prog
+    | Ok req -> LspProtocol.receive_lsp_request id req
   with e ->
     Io.Logger.log (Format.asprintf "Exception in receive_rpc_request: %s\n%s" 
       (Printexc.to_string e)
@@ -291,21 +291,21 @@ let receive_rpc_batch_response (_ : Jsonrpc.Response.t list) = []
 
 let receive_rpc_batch_call (_) = []
 
-let handle_rpc_packet (packet : Jsonrpc.Packet.t) (prog) : (Priority.t * RpcProtocolEvent.t) list =
+let handle_rpc_packet (packet : Jsonrpc.Packet.t) : (Priority.t * RpcProtocolEvent.t) list =
   match packet with
-  | Request req -> receive_rpc_request req prog
+  | Request req -> receive_rpc_request req
   | Notification notif -> receive_rpc_notification notif
   | Response resp -> receive_rpc_response resp
   | Batch_response batch_resp -> receive_rpc_batch_response batch_resp
   | Batch_call batch_call -> receive_rpc_batch_call batch_call
 
-let receive_rpc_packet prog : ((Priority.t * RpcProtocolEvent.t) list, EventError.t) result Lwt.t  =
+let receive_rpc_packet : ((Priority.t * RpcProtocolEvent.t) list, EventError.t) result Lwt.t  =
   let%lwt rpc = read_json_rpc () in
   let result = match rpc with
     | Error e -> Error e
     | Ok packet ->
       Io.Logger.log (Format.asprintf "Received RPC packet: %s" (Yojson.Safe.to_string (Jsonrpc.Packet.yojson_of_t packet)));
-      Ok (handle_rpc_packet packet prog)
+      Ok (handle_rpc_packet packet)
   in
   Lwt.return result
 

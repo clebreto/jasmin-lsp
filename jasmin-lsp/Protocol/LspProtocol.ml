@@ -165,7 +165,7 @@ let rec find_identifier_at_point node point =
     in
     check_children 0 None
 
-let receive_text_document_definition_request (params : Lsp.Types.DefinitionParams.t) (prog:('info,'asm) Jasmin.Prog.prog option) =
+let receive_text_document_definition_request (params : Lsp.Types.DefinitionParams.t) =
   let uri = params.textDocument.uri in
   let position = params.position in
   let point = { TreeSitter.row = position.line; column = position.character } in
@@ -443,26 +443,9 @@ let receive_text_document_definition_request (params : Lsp.Types.DefinitionParam
         (Lsp.Types.DocumentUri.to_string uri)
         (Option.is_some tree_available)
         (Option.is_some source_available));
-      (* Fallback to old Jasmin AST-based approach *)
-      match params.partialResultToken with
-      | None -> 
-          Io.Logger.log "No partialResultToken provided, cannot use AST fallback";
-          Error "No text document provided", []
-      | Some text_doc ->
-        match text_doc with
-        | `Int id -> Error "Invalid token type", []
-        | `String name ->
-          match prog with
-          | None -> Error "Static program not set", []
-          | Some prog ->
-            let pos = (Lsp.Types.DocumentUri.to_string params.textDocument.uri, (params.position.character, params.position.line)) in
-            let definition = Document.AstIndex.find_definition (name, pos) prog in
-            match definition with
-            | None -> Error "No definition found", []
-            | Some (loc_start,loc_end,loc_file) ->
-              let rg = Lsp.Types.Range.create ~end_:loc_end ~start:loc_start in
-              let def = Some (`Location [(Lsp.Types.Location.create ~range:rg ~uri:loc_file)]) in
-                Ok(def), []
+      (* Fallback to old Jasmin AST-based approach - now disabled *)
+      Io.Logger.log "Tree-sitter based definition lookup failed, Jasmin AST fallback disabled";
+      Error "No definition found", []
 
 (** Handle find references request *)
 let receive_text_document_references_request (params : Lsp.Types.ReferenceParams.t) =
@@ -835,11 +818,11 @@ let receive_text_document_code_action_request (params : Lsp.Types.CodeActionPara
   (* Code actions not implemented yet *)
   Ok (Some []), []
 
-let receive_lsp_request_inner : type a. Jsonrpc.Id.t -> a Lsp.Client_request.t -> ('info,'asm) Jasmin.Prog.prog option -> (a,string) result * (Priority.t * RpcProtocolEvent.t) list =
-  fun _ req prog ->
+let receive_lsp_request_inner : type a. Jsonrpc.Id.t -> a Lsp.Client_request.t -> (a,string) result * (Priority.t * RpcProtocolEvent.t) list =
+  fun _ req ->
     match req with
     | Lsp.Client_request.Initialize params -> receive_initialize_request params
-    | Lsp.Client_request.TextDocumentDefinition params -> receive_text_document_definition_request params prog
+    | Lsp.Client_request.TextDocumentDefinition params -> receive_text_document_definition_request params
     | Lsp.Client_request.TextDocumentReferences params -> receive_text_document_references_request params
     | Lsp.Client_request.TextDocumentHover params -> receive_text_document_hover_request params
     | Lsp.Client_request.DocumentSymbol params -> receive_text_document_document_symbol_request params
@@ -849,10 +832,10 @@ let receive_lsp_request_inner : type a. Jsonrpc.Id.t -> a Lsp.Client_request.t -
     (* | Lsp.Client_request.TextDocumentCodeAction params -> receive_text_document_code_action_request params *)
     | _ -> Io.Logger.log ("Unsupported request\n") ; Error "Unsupported request", []
 
-let receive_lsp_request id req prog =
+let receive_lsp_request id req =
   match req with
   | Lsp.Client_request.E req ->
-    let response, events = receive_lsp_request_inner id req prog in
+    let response, events = receive_lsp_request_inner id req in
     (match response with
     | Ok ok_response ->
         let result_json = Lsp.Client_request.yojson_of_result req ok_response in
