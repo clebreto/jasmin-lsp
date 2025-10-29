@@ -177,8 +177,8 @@ CAMLprim value caml_ts_parser_set_language(value v_parser, value v_language) {
   TSParser *parser = Parser_val(v_parser);
   const TSLanguage *language = Language_val(v_language);
   fprintf(stderr, "[C DEBUG] Setting language %p on parser %p\n", (void*)language, (void*)parser);
-  fprintf(stderr, "[C DEBUG] Language ABI version: %u\n", ts_language_abi_version(language));
-  fprintf(stderr, "[C DEBUG] Expected ABI version: %u\n", TREE_SITTER_LANGUAGE_VERSION);
+  fprintf(stderr, "[C DEBUG] Language version: %u\n", ts_language_version(language));
+  fprintf(stderr, "[C DEBUG] Expected version: %u\n", TREE_SITTER_LANGUAGE_VERSION);
   bool success = ts_parser_set_language(parser, language);
   fprintf(stderr, "[C DEBUG] Set language result: %d\n", success);
   if (!success) {
