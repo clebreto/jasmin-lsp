@@ -1,0 +1,10 @@
+// main_use_k.jazz - requires params.jinc and uses K
+require "params.jinc"
+require "hashing.jinc"
+
+export fn main() -> reg u32 {
+    reg u32 x;
+    // Hover on K should find the param definition from params.jinc, not the reg from hashing.jinc
+    x = K;
+    return x;
+}

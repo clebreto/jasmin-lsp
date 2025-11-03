@@ -1,0 +1,11 @@
+// main_wrong_order.jazz - requires hashing.jinc before params.jinc
+require "hashing.jinc"
+require "params.jinc"
+
+export fn main() -> reg u32 {
+    reg u32 x;
+    // Hover on K should still find the param definition from params.jinc, not the reg from hashing.jinc
+    // even though hashing.jinc is required first
+    x = K;
+    return x;
+}

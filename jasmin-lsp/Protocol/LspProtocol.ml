@@ -609,71 +609,96 @@ let receive_text_document_hover_request (params : Lsp.Types.HoverParams.t) =
                 (* Return nothing for keywords without docs *)
                 Ok None, []
           ) else (
-          (* Search across all documents including dependencies *)
-          let all_uris = get_all_relevant_files uri in
-          Io.Logger.log (Format.asprintf "Hover: Building complete source map with %d files" (List.length all_uris));
-          
-          (* Build complete source map upfront with all files from master file dependency tree *)
-          let source_map = build_source_map all_uris in
-          Io.Logger.log (Format.asprintf "Hover: Source map built with %d entries" (Hashtbl.length source_map));
-          
-          let rec search_documents uris =
-            match uris with
-            | [] -> None
-            | doc_uri :: rest ->
+          (* Search using scope-aware resolution across all files *)
+          (match Document.DocumentStore.get_tree (!server_state).document_store uri,
+                 Document.DocumentStore.get_text (!server_state).document_store uri with
+          | Some current_tree, Some current_source ->
+              (* Get all relevant files (uses master file if set, otherwise all open files + their dependencies) *)
+              let all_uris = get_all_relevant_files uri in
+              Io.Logger.log (Format.asprintf "Hover: Extracting symbols from %d files (including transitive deps)" (List.length all_uris));
+              let source_map = build_source_map all_uris in
+              
+              (* Extract symbols from all files at once *)
+              let all_symbols_by_uri = List.filter_map (fun file_uri ->
                 try
-                  (* Try to get the document from store or source_map *)
                   let tree_opt, source_opt =
-                    match Document.DocumentStore.get_tree (!server_state).document_store doc_uri,
-                          Document.DocumentStore.get_text (!server_state).document_store doc_uri with
+                    match Document.DocumentStore.get_tree (!server_state).document_store file_uri,
+                          Document.DocumentStore.get_text (!server_state).document_store file_uri with
                     | Some t, Some s -> Some t, Some s
                     | _ ->
-                        (* Try to get from source_map (loaded from disk) *)
-                        match Hashtbl.find_opt source_map doc_uri with
+                        match Hashtbl.find_opt source_map file_uri with
                         | Some (s, t) -> Some t, Some s
                         | None -> None, None
                   in
-                  
-                  (* Extract symbols using the pre-built source_map *)
                   (match tree_opt, source_opt with
-                  | Some doc_tree, Some doc_source ->
-                      (try
-                        (* Extract basic symbols *)
-                        let doc_symbols = Document.SymbolTable.extract_symbols doc_uri doc_source doc_tree in
-                        (* Enhance with constant values using the complete source_map *)
-                        let doc_symbols_with_values = Document.SymbolTable.enhance_constants_with_values doc_symbols source_map in
-                        
-                        (match Document.SymbolTable.find_definition doc_symbols_with_values symbol_name with
-                        | Some symbol -> 
-                            Io.Logger.log (Format.asprintf "Hover: Found symbol '%s' in %s" 
-                              symbol_name (Lsp.Types.DocumentUri.to_string doc_uri));
-                            Some symbol
-                        | None -> search_documents rest)
-                      with e ->
-                        Io.Logger.log (Format.asprintf "Error extracting symbols from %s: %s\n%s"
-                          (Lsp.Types.DocumentUri.to_string doc_uri)
-                          (Printexc.to_string e)
-                          (Printexc.get_backtrace ()));
-                        search_documents rest)
-                  | _ -> 
-                      Io.Logger.log (Format.asprintf "Hover: No tree/source for %s" 
-                        (Lsp.Types.DocumentUri.to_string doc_uri));
-                      search_documents rest)
+                  | Some tree, Some source ->
+                      let symbols = Document.SymbolTable.extract_symbols file_uri source tree in
+                      let symbols_with_values = Document.SymbolTable.enhance_constants_with_values symbols source_map in
+                      Some (file_uri, symbols_with_values)
+                  | _ -> None)
                 with e ->
-                  Io.Logger.log (Format.asprintf "Error processing file %s: %s\n%s"
-                    (Lsp.Types.DocumentUri.to_string doc_uri)
-                    (Printexc.to_string e)
-                    (Printexc.get_backtrace ()));
-                  search_documents rest
-          in
-          
-          match search_documents all_uris with
+                  Io.Logger.log (Format.asprintf "Error extracting symbols from %s: %s"
+                    (Lsp.Types.DocumentUri.to_string file_uri) (Printexc.to_string e));
+                  None
+              ) all_uris in
+              
+              Io.Logger.log (Format.asprintf "Hover: Extracted symbols from %d/%d files" 
+                (List.length all_symbols_by_uri) (List.length all_uris));
+              
+              (* Find current file symbols for scope-aware lookup *)
+              let current_symbols = List.assoc_opt uri all_symbols_by_uri in
+              
+              (match current_symbols with
+              | Some curr_syms ->
+                  (* Step 1: Try scope-aware lookup in current file (includes local variables) *)
+                  (match Document.SymbolTable.find_definition_at_position curr_syms symbol_name point with
+                  | Some symbol ->
+                      Io.Logger.log (Format.asprintf "Hover: Found '%s' in current file local scope" symbol_name);
+                      (Some (uri, symbol), [])
+                  | None ->
+                      (* Step 2: Not in local scope, search file-level symbols across all files in order *)
+                      Io.Logger.log "Hover: Not in local scope, searching file-level symbols in require order";
+                      let rec search_file_level files =
+                        match files with
+                        | [] -> (None, [])
+                        | (file_uri, file_symbols) :: rest ->
+                            (* Only consider file-level symbols (not local variables) *)
+                            let file_level_syms = List.filter (fun sym ->
+                              match sym.Document.SymbolTable.kind with
+                              | Document.SymbolTable.Parameter 
+                              | Document.SymbolTable.Constant 
+                              | Document.SymbolTable.Function -> true
+                              | Document.SymbolTable.Variable -> 
+                                  (* Check if it's a global variable (not inside a function) *)
+                                  (* For now, we'll include all variables - a more precise check would verify the parent node *)
+                                  true
+                              | _ -> false
+                            ) file_symbols in
+                            
+                            (match Document.SymbolTable.find_definition file_level_syms symbol_name with
+                            | Some symbol ->
+                                Io.Logger.log (Format.asprintf "Hover: Found '%s' as file-level symbol in %s"
+                                  symbol_name (Lsp.Types.DocumentUri.to_string file_uri));
+                                (Some (file_uri, symbol), [])
+                            | None -> search_file_level rest)
+                      in
+                      search_file_level all_symbols_by_uri)
+              | None ->
+                  Io.Logger.log "Hover: Could not extract symbols from current file";
+                  (None, []))
+          | _ ->
+              Io.Logger.log "Hover: Current file not available";
+              (None, []))
+          |> fun (result_opt, events) ->
+          match result_opt with
           | None -> 
               Io.Logger.log (Format.asprintf "Hover: No definition found for '%s'" symbol_name);
               Ok None, []  (* Return None instead of error for unknown symbols *)
-          | Some symbol ->
+          | Some (source_uri, symbol) ->
+              Io.Logger.log (Format.asprintf "Hover: Returning info for '%s' from %s" 
+                symbol.Document.SymbolTable.name (Lsp.Types.DocumentUri.to_string source_uri));
               (* Format hover content based on symbol kind *)
-              let base_markdown = match symbol.kind with
+              let base_markdown = match symbol.Document.SymbolTable.kind with
               | Document.SymbolTable.Parameter | Document.SymbolTable.Variable ->
                   (match symbol.detail with
                   | Some type_str -> 

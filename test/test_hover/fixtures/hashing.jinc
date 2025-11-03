@@ -1,0 +1,6 @@
+// hashing.jinc - incorrectly defines K as a register
+reg u32 K;
+
+fn hash() {
+    K = 42;
+}

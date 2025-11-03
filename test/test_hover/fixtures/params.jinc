@@ -1,0 +1,8 @@
+// params.jinc - defines K as a parameter
+param int K = 256;
+
+fn use_k() -> reg u32 {
+    reg u32 result;
+    result = K;
+    return result;
+}
