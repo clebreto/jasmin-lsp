@@ -830,10 +830,42 @@ let receive_text_document_formatting_request (params : Lsp.Types.DocumentFormatt
   (* Formatting is not implemented yet *)
   Error "Formatting not implemented", []
 
-(** Handle document symbols request *)
+(** Handle code action request *)
 let receive_text_document_code_action_request (params : Lsp.Types.CodeActionParams.t) =
   (* Code actions not implemented yet *)
   Ok (Some []), []
+
+(** Handle semantic tokens request *)
+let receive_text_document_semantic_tokens_full_request (params : Lsp.Types.SemanticTokensParams.t) =
+  let uri = params.textDocument.uri in
+  
+  Io.Logger.log (Format.asprintf "Semantic tokens request for: %s" 
+    (Lsp.Types.DocumentUri.to_string uri));
+  
+  match Document.DocumentStore.get_tree (!server_state).document_store uri,
+        Document.DocumentStore.get_text (!server_state).document_store uri with
+  | Some tree, Some source ->
+      (try
+        (* Extract semantic tokens from the syntax tree *)
+        let tokens = Document.SemanticTokens.extract_semantic_tokens source tree in
+        Io.Logger.log (Format.asprintf "Extracted %d semantic tokens" (List.length tokens));
+        
+        (* Encode tokens into LSP format *)
+        let data_list = Document.SemanticTokens.encode_tokens tokens in
+        let data = Array.of_list data_list in
+        Io.Logger.log (Format.asprintf "Encoded to %d integers" (Array.length data));
+        
+        (* Create semantic tokens response *)
+        let result = Lsp.Types.SemanticTokens.create ~data () in
+        Ok (Some result), []
+      with e ->
+        Io.Logger.log (Format.asprintf "Error extracting semantic tokens: %s\n%s"
+          (Printexc.to_string e)
+          (Printexc.get_backtrace ()));
+        Error (Format.asprintf "Error extracting semantic tokens: %s" (Printexc.to_string e)), [])
+  | _ -> 
+      Io.Logger.log "Document not open or not parsed";
+      Error "Document not open or not parsed", []
 
 let receive_lsp_request_inner : type a. Jsonrpc.Id.t -> a Lsp.Client_request.t -> ('info,'asm) Jasmin.Prog.prog option -> (a,string) result * (Priority.t * RpcProtocolEvent.t) list =
   fun _ req prog ->
@@ -845,6 +877,7 @@ let receive_lsp_request_inner : type a. Jsonrpc.Id.t -> a Lsp.Client_request.t -
     | Lsp.Client_request.DocumentSymbol params -> receive_text_document_document_symbol_request params
     | Lsp.Client_request.WorkspaceSymbol params -> receive_workspace_symbol_request params
     | Lsp.Client_request.TextDocumentRename params -> receive_text_document_rename_request params
+    | Lsp.Client_request.SemanticTokensFull params -> receive_text_document_semantic_tokens_full_request params
     (* | Lsp.Client_request.TextDocumentFormatting params -> receive_text_document_formatting_request params *)
     (* | Lsp.Client_request.TextDocumentCodeAction params -> receive_text_document_code_action_request params *)
     | _ -> Io.Logger.log ("Unsupported request\n") ; Error "Unsupported request", []

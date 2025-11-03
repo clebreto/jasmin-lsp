@@ -12,6 +12,7 @@ All tree-sitter integration issues have been resolved! The language server is pr
 
 ✅ **Tree-Sitter Parsing** - Fast, incremental syntax analysis  
 ✅ **Syntax Diagnostics** - Real-time error detection with intelligent cleanup  
+✅ **Semantic Highlighting** - Rich syntax highlighting via LSP semantic tokens  
 ✅ **Go to Definition** - Navigate to function, variable, parameter, and global definitions  
 ✅ **Cross-File Navigation** - Jump to definitions across `require`d files  
 ✅ **Master File Support** - Proper symbol resolution using compilation entry point  

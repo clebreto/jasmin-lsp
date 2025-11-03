@@ -1,0 +1,28 @@
+
+require "other.jazz"
+from NS require "lib.jazz"
+
+param int VALUE = 42;
+global u64 GLOBAL_VAR;
+
+inline fn helper() {
+  reg u64 x;
+  return x;
+}
+
+export fn process(stack u64 input) -> reg u64 {
+  reg u64 result;
+  
+  if input > 0 {
+    while input > 10 {
+      input = input - 1;
+    }
+    for i = 0 to 100 {
+      result = result + i;
+    }
+  } else {
+    result = 0;
+  }
+  
+  return result;
+}

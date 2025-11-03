@@ -80,6 +80,17 @@ let capabilities: Lsp.Types.ServerCapabilities.t =
   let renameProvider = `Bool true in
   let documentFormattingProvider = `Bool false in (* Not implemented yet *)
   let codeActionProvider = `Bool false in (* Not implemented yet *)
+  
+  (* Semantic tokens for syntax highlighting *)
+  let semanticTokensProvider =
+    let legend = SemanticTokensLegend.create
+      ~tokenTypes:Document.SemanticTokens.token_types_legend
+      ~tokenModifiers:Document.SemanticTokens.token_modifiers_legend
+    in
+    let full = `Bool true in
+    `SemanticTokensOptions (SemanticTokensOptions.create ~legend ~full ())
+  in
+  
   let workspace = ServerCapabilities.create_workspace ~fileOperations () in
   Lsp.Types.ServerCapabilities.create
     ~textDocumentSync 
@@ -91,4 +102,5 @@ let capabilities: Lsp.Types.ServerCapabilities.t =
     ~renameProvider
     ~documentFormattingProvider
     ~codeActionProvider
+    ~semanticTokensProvider
     ~workspace ()

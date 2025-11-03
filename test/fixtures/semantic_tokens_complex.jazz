@@ -1,0 +1,25 @@
+
+// Function with parameters and local variables
+param int CONSTANT = 100;
+
+fn compute(reg u64 x, reg u64 y) -> reg u64 {
+  reg u64 temp;
+  stack u64 buffer;
+  
+  // Arithmetic operations
+  temp = x + y;
+  temp = temp * CONSTANT;
+  
+  // Control flow
+  if temp > 0 {
+    return temp;
+  } else {
+    return 0;
+  }
+}
+
+// Export function
+export fn main() {
+  reg u64 result;
+  result = compute(10, 20);
+}

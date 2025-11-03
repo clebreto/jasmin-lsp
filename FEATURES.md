@@ -244,6 +244,50 @@ Real-time diagnostic updates:
 
 ---
 
+## Semantic Highlighting
+
+LSP-based syntax highlighting with rich token classification:
+
+- ✅ **Token Types**
+  - Functions: Function declarations and calls
+  - Variables: Local, global, and parameter variables
+  - Parameters: Function parameters with declaration modifier
+  - Types: Jasmin types (u64, u32, etc.)
+  - Keywords: Language keywords (fn, if, while, for, return, etc.)
+  - Comments: Single-line and multi-line comments
+  - Operators: Arithmetic, logical, and comparison operators
+  - Numbers: Integer literals
+  - Strings: String literals
+
+- ✅ **Token Modifiers**
+  - Declaration: Symbol declarations
+  - Definition: Symbol definitions
+  - Readonly: Constants (param, global)
+
+- ✅ **Real-Time Updates**
+  - Semantic tokens update on document changes
+  - Incremental token computation
+  - Fast tree-sitter based extraction
+
+- ✅ **LSP Integration**
+  - `textDocument/semanticTokens/full` support
+  - Standard LSP token types and modifiers
+  - Legend provided in server capabilities
+  - Compatible with all LSP clients
+
+### How It Works
+
+The semantic tokens feature uses tree-sitter to analyze the syntax tree and extract tokens with precise type information:
+
+1. **Parse Tree Traversal**: Walk the tree-sitter AST
+2. **Token Classification**: Map AST nodes to LSP token types
+3. **Relative Encoding**: Encode tokens as delta positions (LSP format)
+4. **Client Rendering**: Editor applies semantic colors based on tokens
+
+This provides much richer highlighting than traditional TextMate grammars, with accurate context-aware token classification.
+
+---
+
 ## Code Intelligence
 
 ### Hover Information
@@ -561,7 +605,6 @@ Planned features for future releases:
 - 🔄 Code formatting support
 - 🔄 Code completion
 - 🔄 Quick fixes (code actions)
-- 🔄 Semantic highlighting
 - 🔄 Inlay hints for type information
 - 🔄 Call hierarchy
 - 🔄 Linked editing range
